@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum MovementType {
+  INCOME
+  EXPENSE
+  ADJUSTMENT
+  INVENTORY_DIFF
+}
+
+enum InventoryStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Company {
+  id                String             @id @default(uuid()) @db.Uuid
+  name              String
+  city              String?
+  phone             String?
+  createdAt         DateTime           @default(now())
+  users             User[]
+  categories        Category[]
+  products          Product[]
+  stockMovements    StockMovement[]
+  inventorySessions InventorySession[]
+  auditLogs         AuditLog[]
+}
+
+model User {
+  id                 String             @id @default(uuid()) @db.Uuid
+  companyId          String             @db.Uuid
+  name               String
+  phone              String?
+  email              String?
+  passwordHash       String
+  refreshTokenVersion Int               @default(0)
+  inviteTokenHash    String?
+  inviteExpiresAt    DateTime?
+  role               UserRole
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  stockMovements     StockMovement[]
+  inventorySessions  InventorySession[]
+  auditLogs          AuditLog[]
+
+  @@index([companyId])
+}
+
+model Category {
+  id         String      @id @default(uuid()) @db.Uuid
+  companyId  String      @db.Uuid
+  parentId   String?     @db.Uuid
+  name       String
+  createdAt  DateTime    @default(now())
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent     Category?   @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Category[]  @relation("CategoryTree")
+  products   Product[]
+
+  @@index([companyId])
+  @@index([parentId])
+}
+
+model Product {
+  id              String           @id @default(uuid()) @db.Uuid
+  companyId       String           @db.Uuid
+  categoryId      String?          @db.Uuid
+  name            String
+  sku             String?
+  barcode         String?
+  unit            String
+  description     String?
+  minStock        Decimal          @default(0) @db.Decimal(12, 3)
+  currentStock    Decimal          @default(0) @db.Decimal(12, 3)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category        Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  stockMovements  StockMovement[]
+  inventoryItems  InventoryItem[]
+
+  @@index([companyId])
+  @@index([companyId, categoryId])
+  @@index([companyId, name])
+  @@index([companyId, sku])
+}
+
+model StockMovement {
+  id           String        @id @default(uuid()) @db.Uuid
+  companyId    String        @db.Uuid
+  productId    String        @db.Uuid
+  createdById  String        @db.Uuid
+  movementType MovementType
+  quantity     Decimal       @db.Decimal(12, 3)
+  beforeQty    Decimal       @db.Decimal(12, 3)
+  afterQty     Decimal       @db.Decimal(12, 3)
+  comment      String?
+  createdAt    DateTime      @default(now())
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([productId, createdAt(sort: Desc)])
+}
+
+model InventorySession {
+  id            String            @id @default(uuid()) @db.Uuid
+  companyId     String            @db.Uuid
+  startedById   String            @db.Uuid
+  status        InventoryStatus   @default(DRAFT)
+  comment       String?
+  startedAt     DateTime          @default(now())
+  finishedAt    DateTime?
+  company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  startedBy     User              @relation(fields: [startedById], references: [id], onDelete: Restrict)
+  items         InventoryItem[]
+
+  @@index([companyId])
+}
+
+model InventoryItem {
+  id             String            @id @default(uuid()) @db.Uuid
+  sessionId      String            @db.Uuid
+  productId      String            @db.Uuid
+  expectedQty    Decimal           @db.Decimal(12, 3)
+  actualQty      Decimal           @db.Decimal(12, 3)
+  difference     Decimal           @db.Decimal(12, 3)
+  comment        String?
+  session        InventorySession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId])
+  @@index([productId])
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @db.Uuid
+  userId      String    @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?   @db.Uuid
+  payload     Json?
+  createdAt   DateTime  @default(now())
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt(sort: Desc)])
+}

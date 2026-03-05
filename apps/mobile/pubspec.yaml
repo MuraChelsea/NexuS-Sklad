@@ -1,0 +1,24 @@
+name: nexussklad_mobile
+description: NexusSklad mobile app
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^9.2.4
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  nexussklad_openapi_client:
+    path: generated/openapi_client
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

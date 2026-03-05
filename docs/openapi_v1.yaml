@@ -1,0 +1,1886 @@
+openapi: 3.1.0
+info:
+  title: NexusSklad API
+  version: 0.1.0
+  description: |
+    First repository-tracked OpenAPI export for NexusSklad.
+    Scope is intentionally focused on the current backend and mobile flows.
+servers:
+  - url: http://localhost:4000
+    description: Local API
+tags:
+  - name: auth
+  - name: audit
+  - name: company
+  - name: users
+  - name: categories
+  - name: products
+  - name: movements
+  - name: inventory
+  - name: reports
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /health/ready:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Register company and owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionRegisterResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsError'
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionLoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/accept-invite:
+    post:
+      tags: [auth]
+      summary: Accept invite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInviteRequest'
+      responses:
+        '200':
+          description: Invite accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionAcceptInviteResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/audit:
+    get:
+      tags: [audit]
+      summary: List audit logs
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: entityType
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/company:
+    get:
+      tags: [company]
+      summary: Get company
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Company
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [company]
+      summary: Update company
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompanyRequest'
+      responses:
+        '200':
+          description: Company updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyUpdateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/users:
+    get:
+      tags: [users]
+      summary: List company users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [users]
+      summary: Create user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/users/invite:
+    post:
+      tags: [users]
+      summary: Invite user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteUserRequest'
+      responses:
+        '200':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteUserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/users/{userId}:
+    patch:
+      tags: [users]
+      summary: Update user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserUpdateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/categories:
+    get:
+      tags: [categories]
+      summary: List categories
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [categories]
+      summary: Create category
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '200':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/categories/{categoryId}:
+    get:
+      tags: [categories]
+      summary: Get category
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      responses:
+        '200':
+          description: Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [categories]
+      summary: Update category
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryUpdateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/products:
+    get:
+      tags: [products]
+      summary: List products
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: categoryId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [products]
+      summary: Create product
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '200':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/products/{productId}:
+    get:
+      tags: [products]
+      summary: Get product
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [products]
+      summary: Update product
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductUpdateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/movements:
+    get:
+      tags: [movements]
+      summary: List movements
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: productId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: movementType
+          schema:
+            $ref: '#/components/schemas/MovementType'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Movements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/movements/income:
+    post:
+      tags: [movements]
+      summary: Create income movement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementRequest'
+      responses:
+        '200':
+          description: Income created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementIncomeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/movements/expense:
+    post:
+      tags: [movements]
+      summary: Create expense movement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementRequest'
+      responses:
+        '200':
+          description: Expense created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementExpenseResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/movements/adjustment:
+    post:
+      tags: [movements]
+      summary: Create adjustment movement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdjustmentRequest'
+      responses:
+        '200':
+          description: Adjustment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementAdjustmentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/inventory/start:
+    post:
+      tags: [inventory]
+      summary: Start inventory session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartInventoryRequest'
+      responses:
+        '200':
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStartResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/inventory/{inventoryId}:
+    get:
+      tags: [inventory]
+      summary: Get inventory session
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/InventoryId'
+      responses:
+        '200':
+          description: Inventory session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/inventory/{inventoryId}/items/{itemId}:
+    patch:
+      tags: [inventory]
+      summary: Update inventory item
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/InventoryId'
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInventoryItemRequest'
+      responses:
+        '200':
+          description: Inventory item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItemResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/inventory/{inventoryId}/finish:
+    post:
+      tags: [inventory]
+      summary: Finish inventory session
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/InventoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinishInventoryRequest'
+      responses:
+        '200':
+          description: Inventory session finished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFinishResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/reports/daily:
+    get:
+      tags: [reports]
+      summary: Daily report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/reports/stock:
+    get:
+      tags: [reports]
+      summary: Stock report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: categoryId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: lowOnly
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Stock report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockReportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    CategoryId:
+      in: path
+      name: categoryId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductId:
+      in: path
+      name: productId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InventoryId:
+      in: path
+      name: inventoryId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequestError:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Authentication required or token is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Authenticated user does not have permission for this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Requested resource or route was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: Business conflict prevented request completion
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequestsError:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Unexpected server-side error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    UserRole:
+      type: string
+      enum: [OWNER, MANAGER, STAFF]
+    AuditActor:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+    AuditLog:
+      type: object
+      required: [id, companyId, userId, action, entityType, createdAt, user]
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: [string, 'null']
+          format: uuid
+        payload:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/AuditActor'
+    AuditListResponse:
+      type: object
+      required: [items, module]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        module:
+          const: audit
+    MovementType:
+      type: string
+      enum: [INCOME, EXPENSE, ADJUSTMENT, INVENTORY_DIFF]
+    InventoryStatus:
+      type: string
+      enum: [DRAFT, IN_PROGRESS, COMPLETED]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    ReadinessResponse:
+      type: object
+      required: [status, service, timestamp, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        service:
+          type: string
+          const: nexussklad-api
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          required: [database]
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+    AuthCompany:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    AuthUser:
+      type: object
+      required: [id, companyId, name, role, company]
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        role:
+          $ref: '#/components/schemas/UserRole'
+        company:
+          $ref: '#/components/schemas/AuthCompany'
+    AuthSession:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/AuthUser'
+    RegisterRequest:
+      type: object
+      required: [companyName, ownerName, email, password]
+      properties:
+        companyName:
+          type: string
+        companyCity:
+          type: [string, 'null']
+        companyPhone:
+          type: [string, 'null']
+        ownerName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        password:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    AcceptInviteRequest:
+      type: object
+      required: [inviteToken, name, password]
+      properties:
+        inviteToken:
+          type: string
+        name:
+          type: string
+        phone:
+          type: [string, 'null']
+        password:
+          type: string
+    AuthSessionRegisterResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthSession'
+        - $ref: '#/components/schemas/AuthRegisterMeta'
+    AuthSessionLoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthSession'
+        - $ref: '#/components/schemas/AuthLoginMeta'
+    AuthSessionRefreshResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthSession'
+        - $ref: '#/components/schemas/AuthRefreshMeta'
+    AuthSessionAcceptInviteResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthSession'
+        - $ref: '#/components/schemas/AuthAcceptInviteMeta'
+    AuthRegisterMeta:
+      type: object
+      required: [module, action]
+      properties:
+        module:
+          const: auth
+        action:
+          const: register
+    AuthLoginMeta:
+      type: object
+      required: [module, action]
+      properties:
+        module:
+          const: auth
+        action:
+          const: login
+    AuthRefreshMeta:
+      type: object
+      required: [module, action]
+      properties:
+        module:
+          const: auth
+        action:
+          const: refresh
+    AuthAcceptInviteMeta:
+      type: object
+      required: [module, action]
+      properties:
+        module:
+          const: auth
+        action:
+          const: accept-invite
+    AuthMeResponse:
+      type: object
+      required: [user, module, action]
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        module:
+          const: auth
+        action:
+          const: me
+    Company:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        city:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+    UpdateCompanyRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        city:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+    CompanyResponse:
+      type: object
+      required: [item, module]
+      properties:
+        item:
+          $ref: '#/components/schemas/Company'
+        module:
+          const: company
+    CompanyUpdateResponse:
+      allOf:
+        - $ref: '#/components/schemas/CompanyResponse'
+        - type: object
+          required: [action]
+          properties:
+            action:
+              const: update
+    CompanyUser:
+      type: object
+      required: [id, companyId, name, role, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: [string, 'null']
+        phone:
+          type: [string, 'null']
+        role:
+          $ref: '#/components/schemas/UserRole'
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        inviteExpiresAt:
+          type: [string, 'null']
+          format: date-time
+    CreateUserRequest:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        password:
+          type: string
+        role:
+          type: string
+          enum: [MANAGER, STAFF]
+    UpdateUserRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: [string, 'null']
+        password:
+          type: string
+        role:
+          type: string
+          enum: [MANAGER, STAFF]
+        isActive:
+          type: boolean
+    InviteUserRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [MANAGER, STAFF]
+    UserListResponse:
+      type: object
+      required: [items, module]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanyUser'
+        module:
+          const: users
+    UserResponse:
+      type: object
+      required: [item, module]
+      properties:
+        item:
+          $ref: '#/components/schemas/CompanyUser'
+        module:
+          const: users
+        action:
+          type: string
+    UserUpdateResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserResponse'
+        - type: object
+          properties:
+            action:
+              const: update
+    InviteUserResponse:
+      type: object
+      required: [user, inviteToken, module, action]
+      properties:
+        user:
+          $ref: '#/components/schemas/CompanyUser'
+        inviteToken:
+          type: string
+        module:
+          const: users
+        action:
+          const: invite
+    Category:
+      type: object
+      required: [id, companyId, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        parentId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parentId:
+          type: [string, 'null']
+          format: uuid
+    UpdateCategoryRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        parentId:
+          type: [string, 'null']
+          format: uuid
+    CategoryListResponse:
+      type: object
+      required: [items, module]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        module:
+          const: categories
+    CategoryResponse:
+      type: object
+      required: [item, module]
+      properties:
+        item:
+          $ref: '#/components/schemas/Category'
+        module:
+          const: categories
+        action:
+          type: string
+    CategoryUpdateResponse:
+      allOf:
+        - $ref: '#/components/schemas/CategoryResponse'
+        - type: object
+          properties:
+            action:
+              const: update
+    ProductCategory:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    Product:
+      type: object
+      required:
+        - id
+        - companyId
+        - name
+        - unit
+        - minStock
+        - currentStock
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        barcode:
+          type: [string, 'null']
+        unit:
+          type: string
+        description:
+          type: [string, 'null']
+        minStock:
+          type: string
+        currentStock:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        category:
+          anyOf:
+            - $ref: '#/components/schemas/ProductCategory'
+            - type: 'null'
+    CreateProductRequest:
+      type: object
+      required: [name, unit]
+      properties:
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        barcode:
+          type: [string, 'null']
+        unit:
+          type: string
+        description:
+          type: [string, 'null']
+        minStock:
+          type: number
+        currentStock:
+          type: number
+    UpdateProductRequest:
+      type: object
+      minProperties: 1
+      properties:
+        categoryId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        barcode:
+          type: [string, 'null']
+        unit:
+          type: string
+        description:
+          type: [string, 'null']
+        minStock:
+          type: number
+    ProductListResponse:
+      type: object
+      required: [items, module]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        module:
+          const: products
+    ProductResponse:
+      type: object
+      required: [item, module]
+      properties:
+        item:
+          $ref: '#/components/schemas/Product'
+        module:
+          const: products
+        action:
+          type: string
+    ProductUpdateResponse:
+      allOf:
+        - $ref: '#/components/schemas/ProductResponse'
+        - type: object
+          properties:
+            action:
+              const: update
+    MovementActor:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+    MovementProduct:
+      type: object
+      required: [id, name, unit]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        unit:
+          type: string
+    StockMovement:
+      type: object
+      required:
+        - id
+        - companyId
+        - productId
+        - createdById
+        - movementType
+        - quantity
+        - beforeQty
+        - afterQty
+        - createdAt
+        - product
+        - createdBy
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        createdById:
+          type: string
+          format: uuid
+        movementType:
+          $ref: '#/components/schemas/MovementType'
+        quantity:
+          type: string
+        beforeQty:
+          type: string
+        afterQty:
+          type: string
+        comment:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        product:
+          $ref: '#/components/schemas/MovementProduct'
+        createdBy:
+          $ref: '#/components/schemas/MovementActor'
+    CreateMovementRequest:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+        comment:
+          type: [string, 'null']
+    CreateAdjustmentRequest:
+      type: object
+      required: [productId, targetQty]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        targetQty:
+          type: number
+          minimum: 0
+        comment:
+          type: [string, 'null']
+    MovementListResponse:
+      type: object
+      required: [items, module]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMovement'
+        module:
+          const: movements
+    MovementResponse:
+      type: object
+      required: [item, module, action]
+      properties:
+        item:
+          $ref: '#/components/schemas/StockMovement'
+        module:
+          const: movements
+        action:
+          type: string
+    MovementIncomeResponse:
+      allOf:
+        - $ref: '#/components/schemas/MovementResponse'
+        - type: object
+          properties:
+            action:
+              const: income
+    MovementExpenseResponse:
+      allOf:
+        - $ref: '#/components/schemas/MovementResponse'
+        - type: object
+          properties:
+            action:
+              const: expense
+    MovementAdjustmentResponse:
+      allOf:
+        - $ref: '#/components/schemas/MovementResponse'
+        - type: object
+          properties:
+            action:
+              const: adjustment
+    InventoryProduct:
+      type: object
+      required: [id, name, unit]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        unit:
+          type: string
+    InventoryStartedBy:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+    InventoryItem:
+      type: object
+      required:
+        - id
+        - sessionId
+        - productId
+        - expectedQty
+        - actualQty
+        - difference
+        - product
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        expectedQty:
+          type: string
+        actualQty:
+          type: string
+        difference:
+          type: string
+        comment:
+          type: [string, 'null']
+        product:
+          $ref: '#/components/schemas/InventoryProduct'
+    InventorySession:
+      type: object
+      required:
+        - id
+        - companyId
+        - startedById
+        - startedBy
+        - status
+        - startedAt
+        - items
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        startedById:
+          type: string
+          format: uuid
+        startedBy:
+          $ref: '#/components/schemas/InventoryStartedBy'
+        status:
+          $ref: '#/components/schemas/InventoryStatus'
+        comment:
+          type: [string, 'null']
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: [string, 'null']
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+    StartInventoryRequest:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        productIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        comment:
+          type: [string, 'null']
+    UpdateInventoryItemRequest:
+      type: object
+      required: [actualQty]
+      properties:
+        actualQty:
+          type: number
+          minimum: 0
+        comment:
+          type: [string, 'null']
+    FinishInventoryRequest:
+      type: object
+      properties:
+        comment:
+          type: [string, 'null']
+    InventoryResponse:
+      type: object
+      required: [item, module]
+      properties:
+        item:
+          $ref: '#/components/schemas/InventorySession'
+        module:
+          const: inventory
+        action:
+          type: string
+    InventoryStartResponse:
+      allOf:
+        - $ref: '#/components/schemas/InventoryResponse'
+        - type: object
+          properties:
+            action:
+              const: start
+    InventoryFinishResponse:
+      allOf:
+        - $ref: '#/components/schemas/InventoryResponse'
+        - type: object
+          properties:
+            action:
+              const: finish
+    InventoryItemResponse:
+      type: object
+      required: [item, module, action]
+      properties:
+        item:
+          $ref: '#/components/schemas/InventoryItem'
+        module:
+          const: inventory
+        action:
+          const: update-item
+    DailyMovementSummaryItem:
+      type: object
+      required: [count, quantity]
+      properties:
+        count:
+          type: integer
+        quantity:
+          type: string
+    DailyInventorySession:
+      type: object
+      required: [id, status, startedAt, startedBy, _count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: [string, 'null']
+          format: date-time
+        comment:
+          type: [string, 'null']
+        startedBy:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        _count:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: integer
+    DailyReport:
+      type: object
+      required: [date, movementSummary, inventory, stock]
+      properties:
+        date:
+          type: string
+          format: date
+        movementSummary:
+          type: object
+          properties:
+            INCOME:
+              $ref: '#/components/schemas/DailyMovementSummaryItem'
+            EXPENSE:
+              $ref: '#/components/schemas/DailyMovementSummaryItem'
+            ADJUSTMENT:
+              $ref: '#/components/schemas/DailyMovementSummaryItem'
+            INVENTORY_DIFF:
+              $ref: '#/components/schemas/DailyMovementSummaryItem'
+        inventory:
+          type: object
+          required: [sessionsCount, sessions]
+          properties:
+            sessionsCount:
+              type: integer
+            sessions:
+              type: array
+              items:
+                $ref: '#/components/schemas/DailyInventorySession'
+        stock:
+          type: object
+          required: [totalProducts, lowStockCount]
+          properties:
+            totalProducts:
+              type: integer
+            lowStockCount:
+              type: integer
+    DailyReportResponse:
+      type: object
+      required: [item, module, report]
+      properties:
+        item:
+          $ref: '#/components/schemas/DailyReport'
+        module:
+          const: reports
+        report:
+          const: daily
+    StockReportItem:
+      type: object
+      required: [id, name, unit, currentStock, minStock, isLowStock]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: [string, 'null']
+        unit:
+          type: string
+        currentStock:
+          type: string
+        minStock:
+          type: string
+        isLowStock:
+          type: boolean
+        category:
+          anyOf:
+            - $ref: '#/components/schemas/ProductCategory'
+            - type: 'null'
+    StockReport:
+      type: object
+      required: [summary, items]
+      properties:
+        summary:
+          type: object
+          required: [totalItems, lowStockItems]
+          properties:
+            totalItems:
+              type: integer
+            lowStockItems:
+              type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockReportItem'
+    StockReportResponse:
+      type: object
+      required: [item, module, report]
+      properties:
+        item:
+          $ref: '#/components/schemas/StockReport'
+        module:
+          const: reports
+        report:
+          const: stock

@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.dart_tool
+**/.DS_Store
+**/*.tsbuildinfo
+.env
+**/.env
+.git
+apps/mobile
+docs/openapi_v1.yaml

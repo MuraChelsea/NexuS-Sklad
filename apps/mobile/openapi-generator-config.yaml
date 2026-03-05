@@ -1,0 +1,9 @@
+pubName: nexussklad_openapi_client
+pubVersion: 0.1.0
+pubDescription: Generated OpenAPI transport client for NexusSklad mobile.
+serializationLibrary: json_serializable
+useEnumExtension: true
+hideGenerationTimestamp: true
+nullableFields: true
+disallowAdditionalPropertiesIfNotPresent: false
+legacyDiscriminatorBehavior: false

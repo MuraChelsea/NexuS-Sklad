@@ -1,0 +1,18 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# NexusSklad production-like daily backup + prune + health check at 03:10 UTC
+10 3 * * * cd /root/nexussklad/infra/deploy && ./ops_daily.sh production >> /var/log/nexussklad-ops.log 2>&1
+
+# NexusSklad staging daily backup + prune + health check at 03:40 UTC
+40 3 * * * cd /root/nexussklad/infra/deploy && ./ops_daily.sh staging >> /var/log/nexussklad-ops.log 2>&1
+
+# NexusSklad weekly staging restore drill on Sunday at 04:15 UTC
+15 4 * * 0 cd /root/nexussklad/infra/deploy && ./ops_weekly.sh staging >> /var/log/nexussklad-ops.log 2>&1
+
+# NexusSklad ops log rotation at 04:50 UTC
+50 4 * * * cd /root/nexussklad/infra/deploy && ./rotate_ops_logs.sh >> /var/log/nexussklad-ops.log 2>&1
+
+# Optional lightweight health checks every 15 minutes
+*/15 * * * * cd /root/nexussklad/infra/deploy && ./monitor_check.sh production >> /var/log/nexussklad-health.log 2>&1
+*/15 * * * * cd /root/nexussklad/infra/deploy && ./monitor_check.sh staging >> /var/log/nexussklad-health.log 2>&1

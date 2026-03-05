@@ -1,0 +1,74 @@
+# NexusSklad UI Fix Pack
+
+Дата:
+Источник: `{{SOURCE_REPORT}}`
+Статус: draft
+
+## Goal
+
+Собрать findings из UI smoke pass в реализуемые пачки фиксов без смешивания `S1`, `S2` и `S3`.
+
+## Scope Rules
+
+- не смешивать `S1` и cosmetic polish;
+- сначала закрывать `stock/inventory/auth/roles`;
+- потом `empty/error/offline UX`;
+- потом cosmetic cleanup.
+
+## Pack 1
+
+Название:
+Severity:
+Areas:
+
+### Findings
+
+- 
+
+### Root cause
+
+- 
+
+### Expected checks after fix
+
+- 
+
+## Pack 2
+
+Название:
+Severity:
+Areas:
+
+### Findings
+
+- 
+
+### Root cause
+
+- 
+
+### Expected checks after fix
+
+- 
+
+## Pack 3
+
+Название:
+Severity:
+Areas:
+
+### Findings
+
+- 
+
+### Root cause
+
+- 
+
+### Expected checks after fix
+
+- 
+
+## Deferred
+
+- 
