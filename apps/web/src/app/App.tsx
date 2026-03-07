@@ -355,6 +355,166 @@ function sortCategories(categories: CategoryDto[], allCategories: CategoryDto[],
   });
 }
 
+export function selectVisibleProducts(
+  products: ProductDto[],
+  productFilter: ProductFilter = 'ALL',
+  productSearch = '',
+  productSort: ProductSort = 'LOW_FIRST',
+) {
+  const filteredProducts = products.filter((product) => {
+    switch (productFilter) {
+      case 'LOW_STOCK':
+        return Number(product.currentStock) <= Number(product.minStock);
+      case 'UNCATEGORIZED':
+        return !product.categoryId;
+      case 'ALL':
+      default:
+        return true;
+    }
+  });
+  const normalizedSearch = productSearch.trim().toLowerCase();
+  const compactProductSearch = normalizeAuditToken(normalizedSearch);
+  const visibleProducts = normalizedSearch
+    ? filteredProducts.filter((product) => {
+      const compactProductId = product.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const compactSku = (product.sku ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const barcodeDigits = (product.barcode ?? '').replaceAll(/\D+/g, '');
+      const searchValues = [
+        product.id,
+        compactProductId,
+        product.name,
+        product.sku ?? '',
+        compactSku,
+        product.barcode ?? '',
+        barcodeDigits,
+        product.category?.name ?? '',
+        product.unit,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (searchValues.includes(normalizedSearch)) {
+        return true;
+      }
+      if (!compactProductSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchValues).includes(compactProductSearch);
+    })
+    : filteredProducts;
+
+  return sortCatalogProducts(visibleProducts, productSort);
+}
+
+export function selectVisibleMovements(
+  movements: StockMovementDto[],
+  movementFilter: MovementFilter = 'ALL',
+  movementSearch = '',
+  movementSort: MovementSort = 'NEWEST',
+) {
+  const filteredMovements = movementFilter === 'ALL'
+    ? movements
+    : movements.filter((movement) => movement.movementType === movementFilter);
+  const normalizedSearch = movementSearch.trim().toLowerCase();
+  const compactMovementSearch = normalizeAuditToken(normalizedSearch);
+  const visibleMovements = normalizedSearch
+    ? filteredMovements.filter((movement) => {
+      const searchText = buildMovementSearchText(movement);
+      if (searchText.includes(normalizedSearch)) {
+        return true;
+      }
+      if (!compactMovementSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactMovementSearch);
+    })
+    : filteredMovements;
+
+  return sortMovementsByCreatedAt(visibleMovements, movementSort);
+}
+
+export function selectVisibleInventorySessions(
+  sessions: DailyReportDto['inventory']['sessions'],
+  sessionFilter: InventorySessionFilter = 'ALL',
+  sessionSearch = '',
+  sessionSort: InventorySessionSort = 'NEWEST',
+) {
+  const filteredSessions = sessionFilter === 'ALL'
+    ? sessions
+    : sessions.filter((session) => session.status === sessionFilter);
+  const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
+  const compactSessionSearch = normalizeAuditToken(normalizedSessionSearch);
+  const visibleSessions = normalizedSessionSearch
+    ? filteredSessions.filter((session) => {
+      const searchText = buildInventorySessionSearchText(session);
+      if (searchText.includes(normalizedSessionSearch)) {
+        return true;
+      }
+      if (!compactSessionSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactSessionSearch);
+    })
+    : filteredSessions;
+
+  return sortInventorySessionsByStartedAt(visibleSessions, sessionSort);
+}
+
+export function selectVisibleStockReportItems(
+  items: StockReportDto['items'],
+  stockStatusFilter: StockStatusFilter = 'ALL',
+  stockSort: StockReportSort = 'LOW_FIRST',
+) {
+  const filteredStockItems = stockStatusFilter === 'ALL'
+    ? items
+    : items.filter((item) => (stockStatusFilter === 'LOW' ? item.isLowStock : !item.isLowStock));
+
+  return sortStockReportItems(filteredStockItems, stockSort);
+}
+
+export function selectVisibleAuditLogs(
+  logs: AuditLogDto[],
+  auditSearch = '',
+  auditSort: 'NEWEST' | 'OLDEST' = 'NEWEST',
+) {
+  const normalizedAuditSearch = auditSearch.trim().toLowerCase();
+  const compactAuditSearch = normalizeAuditToken(normalizedAuditSearch);
+  const filteredLogs = normalizedAuditSearch
+    ? logs.filter((log) => {
+      const payloadSearchText = buildAuditPayloadSummary(log.payload).join(' ');
+      const searchValues = [
+        formatAuditActionLabel(log.action),
+        formatEntityTypeLabel(log.entityType),
+        log.id,
+        log.action,
+        log.entityType,
+        log.createdAt,
+        new Date(log.createdAt).toLocaleString('ru-RU'),
+        log.user.id,
+        log.user.name,
+        formatRoleLabel(log.user.role),
+        log.user.role,
+        log.entityId ?? '',
+        payloadSearchText,
+      ].join(' ').toLowerCase();
+      if (searchValues.includes(normalizedAuditSearch)) {
+        return true;
+      }
+      if (!compactAuditSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchValues).includes(compactAuditSearch);
+    })
+    : logs;
+
+  return filteredLogs
+    .slice()
+    .sort((left, right) => (
+      auditSort === 'OLDEST'
+        ? new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+        : new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    ));
+}
+
 function formatEntityTypeLabel(entityType: string) {
   switch (normalizeAuditToken(entityType)) {
     case 'category':
@@ -891,13 +1051,12 @@ export function App() {
                     });
                     if (!deleted) return;
                   }}
-                  onExportProducts={() => {
-                    if (!data) return;
+                  onExportProducts={(items) => {
                     downloadCsv(
                       'nexussklad-products.csv',
                       [
                         ['name', 'sku', 'barcode', 'category', 'unit', 'currentStock', 'minStock'],
-                        ...data.products.map((item) => [
+                        ...items.map((item) => [
                           item.name,
                           item.sku ?? '',
                           item.barcode ?? '',
@@ -918,12 +1077,12 @@ export function App() {
                   movements={data.movements}
                   canAdjust={canAdjust(session.user.role)}
                   onCreate={(kind) => setMovementModal(kind)}
-                  onExport={() => {
+                  onExport={(items) => {
                     downloadCsv(
                       'nexussklad-movements.csv',
                       [
                         ['type', 'product', 'actor', 'quantity', 'beforeQty', 'afterQty', 'createdAt'],
-                        ...data.movements.map((item) => [
+                        ...items.map((item) => [
                           item.movementType,
                           item.product.name,
                           item.createdBy.name,
@@ -970,12 +1129,12 @@ export function App() {
                     if (!inventory) return;
                     setSelectedInventory(inventory);
                   }}
-                  onExportStock={() => {
+                  onExportStock={(items) => {
                     downloadCsv(
                       'nexussklad-stock-report.csv',
                       [
                         ['name', 'sku', 'category', 'unit', 'currentStock', 'minStock', 'isLowStock'],
-                        ...data.stockReport.items.map((item) => [
+                        ...items.map((item) => [
                           item.name,
                           item.sku ?? '',
                           item.category?.name ?? '',
@@ -1090,12 +1249,12 @@ export function App() {
                   users={data.users}
                   onChangeFilters={(next) => setAuditFilters((current) => ({ ...current, ...next }))}
                   onClearFilters={() => setAuditFilters({ userId: '', entityType: '', action: '' })}
-                  onExport={() => {
+                  onExport={(items) => {
                     downloadCsv(
                       buildExportFileName('audit-trail', collectAuditFilterTokens(auditFilters, data.users)),
                       [
                         ['createdAt', 'action', 'entityType', 'entityId', 'user', 'role', 'payload'],
-                        ...data.auditLogs.map((item) => [
+                        ...items.map((item) => [
                           item.createdAt,
                           item.action,
                           item.entityType,
@@ -1759,7 +1918,7 @@ export function ProductsView({
   onEditCategory: (category: CategoryDto) => void;
   onDeleteProduct: (product: ProductDto) => void;
   onDeleteCategory: (category: CategoryDto) => void;
-  onExportProducts: () => void;
+  onExportProducts: (items: ProductDto[]) => void;
   defaultFilter?: ProductFilter;
   defaultSearch?: string;
   defaultCategorySearch?: string;
@@ -1774,47 +1933,8 @@ export function ProductsView({
   const lowStockProducts = products.filter((product) => Number(product.currentStock) <= Number(product.minStock)).length;
   const uncategorizedProducts = products.filter((product) => !product.categoryId).length;
   const rootCategories = categories.filter((category) => !category.parentId).length;
-  const filteredProducts = products.filter((product) => {
-    switch (productFilter) {
-      case 'LOW_STOCK':
-        return Number(product.currentStock) <= Number(product.minStock);
-      case 'UNCATEGORIZED':
-        return !product.categoryId;
-      case 'ALL':
-      default:
-        return true;
-    }
-  });
   const normalizedSearch = productSearch.trim().toLowerCase();
-  const compactProductSearch = normalizeAuditToken(normalizedSearch);
-  const visibleProducts = normalizedSearch
-    ? filteredProducts.filter((product) => {
-      const compactProductId = product.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
-      const compactSku = (product.sku ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
-      const barcodeDigits = (product.barcode ?? '').replaceAll(/\D+/g, '');
-      const searchValues = [
-        product.id,
-        compactProductId,
-        product.name,
-        product.sku ?? '',
-        compactSku,
-        product.barcode ?? '',
-        barcodeDigits,
-        product.category?.name ?? '',
-        product.unit,
-      ]
-        .join(' ')
-        .toLowerCase();
-      if (searchValues.includes(normalizedSearch)) {
-        return true;
-      }
-      if (!compactProductSearch) {
-        return false;
-      }
-      return normalizeAuditToken(searchValues).includes(compactProductSearch);
-    })
-    : filteredProducts;
-  const orderedProducts = sortCatalogProducts(visibleProducts, productSort);
+  const orderedProducts = selectVisibleProducts(products, productFilter, productSearch, productSort);
   const productFilterOptions: Array<{ value: ProductFilter; label: string }> = [
     { value: 'ALL', label: 'Все' },
     { value: 'LOW_STOCK', label: 'Низкий остаток' },
@@ -1861,7 +1981,7 @@ export function ProductsView({
             <h3 style={{ margin: 0 }}>Товары</h3>
           </div>
           <div className="toolbar-actions">
-            <button className="button-ghost" onClick={onExportProducts}>Экспорт CSV</button>
+            <button className="button-ghost" onClick={() => onExportProducts(orderedProducts)}>Экспорт CSV</button>
             {canManage ? <button className="button" onClick={onCreate}>Новый товар</button> : null}
           </div>
         </div>
@@ -1930,7 +2050,7 @@ export function ProductsView({
             actionLabel={canManage ? 'Создать товар' : undefined}
             onAction={canManage ? onCreate : undefined}
           />
-        ) : visibleProducts.length === 0 ? (
+        ) : orderedProducts.length === 0 ? (
           normalizedSearch ? (
             <InlineState
               title="Поиск не дал товаров по текущему фильтру."
@@ -2102,7 +2222,7 @@ export function MovementsView({
   movements: StockMovementDto[];
   canAdjust: boolean;
   onCreate: (kind: 'income' | 'expense' | 'adjustment') => void;
-  onExport: () => void;
+  onExport: (items: StockMovementDto[]) => void;
   defaultFilter?: MovementFilter;
   defaultSearch?: string;
   defaultSort?: MovementSort;
@@ -2114,24 +2234,8 @@ export function MovementsView({
     acc[movement.movementType] = (acc[movement.movementType] ?? 0) + 1;
     return acc;
   }, {});
-  const filteredMovements = movementFilter === 'ALL'
-    ? movements
-    : movements.filter((movement) => movement.movementType === movementFilter);
   const normalizedSearch = movementSearch.trim().toLowerCase();
-  const compactMovementSearch = normalizeAuditToken(normalizedSearch);
-  const visibleMovements = normalizedSearch
-    ? filteredMovements.filter((movement) => {
-      const searchText = buildMovementSearchText(movement);
-      if (searchText.includes(normalizedSearch)) {
-        return true;
-      }
-      if (!compactMovementSearch) {
-        return false;
-      }
-      return normalizeAuditToken(searchText).includes(compactMovementSearch);
-    })
-    : filteredMovements;
-  const orderedMovements = sortMovementsByCreatedAt(visibleMovements, movementSort);
+  const orderedMovements = selectVisibleMovements(movements, movementFilter, movementSearch, movementSort);
   const movementFilterOptions: Array<{ value: MovementFilter; label: string }> = [
     { value: 'ALL', label: 'Все' },
     { value: 'INCOME', label: 'Приход' },
@@ -2151,7 +2255,7 @@ export function MovementsView({
           <button className="button" onClick={() => onCreate('income')}>Приход</button>
           <button className="button-secondary" onClick={() => onCreate('expense')}>Расход</button>
           {canAdjust ? <button className="button-ghost" onClick={() => onCreate('adjustment')}>Корректировка</button> : null}
-          <button className="button-ghost" onClick={onExport}>Экспорт CSV</button>
+          <button className="button-ghost" onClick={() => onExport(orderedMovements)}>Экспорт CSV</button>
         </div>
       </div>
       <div className="toolbar audit-insights">
@@ -2219,7 +2323,7 @@ export function MovementsView({
           actionLabel={products.length > 0 ? 'Создать приход' : undefined}
           onAction={products.length > 0 ? () => onCreate('income') : undefined}
         />
-      ) : visibleMovements.length === 0 ? (
+      ) : orderedMovements.length === 0 ? (
         normalizedSearch ? (
           <InlineState
             title="Поиск не дал движений по текущему фильтру."
@@ -2281,7 +2385,7 @@ export function InventoryView({
   onChangeFilters: (next: Partial<ReportFiltersState>) => void;
   onStart: () => void;
   onOpenSession: (inventoryId: string) => void;
-  onExportStock: () => void;
+  onExportStock: (items: StockReportDto['items']) => void;
   defaultSessionFilter?: InventorySessionFilter;
   defaultSessionSearch?: string;
   defaultSessionSort?: InventorySessionSort;
@@ -2296,29 +2400,10 @@ export function InventoryView({
   const reportFilterBadges = collectReportFilterBadges(filters, categories);
   const draftSessions = report.inventory.sessions.filter((session) => session.status !== 'COMPLETED').length;
   const completedSessions = report.inventory.sessions.filter((session) => session.status === 'COMPLETED').length;
-  const filteredSessions = sessionFilter === 'ALL'
-    ? report.inventory.sessions
-    : report.inventory.sessions.filter((session) => session.status === sessionFilter);
   const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
-  const compactSessionSearch = normalizeAuditToken(normalizedSessionSearch);
-  const visibleSessions = normalizedSessionSearch
-    ? filteredSessions.filter((session) => {
-      const searchText = buildInventorySessionSearchText(session);
-      if (searchText.includes(normalizedSessionSearch)) {
-        return true;
-      }
-      if (!compactSessionSearch) {
-        return false;
-      }
-      return normalizeAuditToken(searchText).includes(compactSessionSearch);
-    })
-    : filteredSessions;
-  const orderedSessions = sortInventorySessionsByStartedAt(visibleSessions, sessionSort);
+  const orderedSessions = selectVisibleInventorySessions(report.inventory.sessions, sessionFilter, sessionSearch, sessionSort);
   const hasActiveStockFilters = Boolean(filters.stockSearch || filters.stockCategoryId || filters.lowOnly);
-  const filteredStockItems = stockStatusFilter === 'ALL'
-    ? stockReport.items
-    : stockReport.items.filter((item) => (stockStatusFilter === 'LOW' ? item.isLowStock : !item.isLowStock));
-  const orderedStockItems = sortStockReportItems(filteredStockItems, stockSort);
+  const orderedStockItems = selectVisibleStockReportItems(stockReport.items, stockStatusFilter, stockSort);
   const sessionFilterOptions: Array<{ value: InventorySessionFilter; label: string }> = [
     { value: 'ALL', label: 'Все' },
     { value: 'DRAFT', label: 'Черновики' },
@@ -2360,7 +2445,7 @@ export function InventoryView({
             actionLabel={canManage ? 'Запустить сессию' : undefined}
             onAction={canManage ? onStart : undefined}
           />
-        ) : visibleSessions.length === 0 ? (
+        ) : orderedSessions.length === 0 ? (
           <>
             <div className="filter-panel inventory-filter-panel">
               <div className="toolbar-actions toolbar-filters">
@@ -2506,7 +2591,7 @@ export function InventoryView({
             <h3 style={{ margin: 0 }}>Отчет по остаткам</h3>
           </div>
           <div className="toolbar-actions">
-            <button className="button-ghost" onClick={onExportStock}>Экспорт CSV</button>
+            <button className="button-ghost" onClick={() => onExportStock(orderedStockItems)}>Экспорт CSV</button>
           </div>
         </div>
         <div className="reporting-context-grid stock-report-context-grid">
@@ -3227,7 +3312,7 @@ export function AuditView({
   users: CompanyUserDto[];
   onChangeFilters: (next: Partial<AuditFiltersState>) => void;
   onClearFilters: () => void;
-  onExport: () => void;
+  onExport: (items: AuditLogDto[]) => void;
   defaultSearch?: string;
   defaultSort?: 'NEWEST' | 'OLDEST';
 }) {
@@ -3250,41 +3335,7 @@ export function AuditView({
     { label: 'Обновление сотрудника', value: 'user.updated' },
   ];
   const normalizedAuditSearch = auditSearch.trim().toLowerCase();
-  const compactAuditSearch = normalizeAuditToken(normalizedAuditSearch);
-  const filteredLogs = normalizedAuditSearch
-    ? logs.filter((log) => {
-      const payloadSearchText = buildAuditPayloadSummary(log.payload).join(' ');
-      const searchValues = [
-        formatAuditActionLabel(log.action),
-        formatEntityTypeLabel(log.entityType),
-        log.id,
-        log.action,
-        log.entityType,
-        log.createdAt,
-        new Date(log.createdAt).toLocaleString('ru-RU'),
-        log.user.id,
-        log.user.name,
-        formatRoleLabel(log.user.role),
-        log.user.role,
-        log.entityId ?? '',
-        payloadSearchText,
-      ].join(' ').toLowerCase();
-      if (searchValues.includes(normalizedAuditSearch)) {
-        return true;
-      }
-      if (!compactAuditSearch) {
-        return false;
-      }
-      return normalizeAuditToken(searchValues).includes(compactAuditSearch);
-    })
-    : logs;
-  const visibleLogs = filteredLogs
-    .slice()
-    .sort((left, right) => (
-      auditSort === 'OLDEST'
-        ? new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
-        : new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-    ));
+  const visibleLogs = selectVisibleAuditLogs(logs, auditSearch, auditSort);
   const insights = buildAuditInsights(visibleLogs);
   const filterBadges = collectAuditFilterBadges(filters, users);
   const hasActiveFilters = filterBadges.length > 0;
@@ -3297,7 +3348,7 @@ export function AuditView({
           <h3 style={{ margin: 0 }}>Журнал изменений</h3>
         </div>
         <div className="toolbar-actions">
-          <button className="button-ghost" onClick={onExport}>Экспорт CSV</button>
+          <button className="button-ghost" onClick={() => onExport(visibleLogs)}>Экспорт CSV</button>
           <button
             className={`button-ghost quick-filter-button${auditSort === 'NEWEST' ? ' active' : ''}`}
             onClick={() => setAuditSort('NEWEST')}

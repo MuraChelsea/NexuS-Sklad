@@ -26,6 +26,10 @@ import {
   ProductModal,
   ProductsView,
   ReportingView,
+  selectVisibleAuditLogs,
+  selectVisibleMovements,
+  selectVisibleProducts,
+  selectVisibleStockReportItems,
   StockReportRow,
   TeamUserRow,
   TeamView,
@@ -59,6 +63,79 @@ test('App restores persisted web session from localStorage', () => {
   } finally {
     global.window = originalWindow;
   }
+});
+
+test('selectVisibleProducts applies current catalog filter, search and sort for export parity', () => {
+  const items = selectVisibleProducts(
+    [
+      { ...demoProduct(), id: 'prod-ok', name: 'Арбуз', currentStock: '10', minStock: '2', sku: 'SKU-ARB' },
+      { ...demoProduct(), id: 'prod-low', name: 'Банан', currentStock: '1', minStock: '3', sku: 'SKU-BAN' },
+    ],
+    'LOW_STOCK',
+    'sku ban',
+    'NAME_ASC',
+  );
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].name, 'Банан');
+});
+
+test('selectVisibleMovements applies current journal search and sort for export parity', () => {
+  const items = selectVisibleMovements(
+    [
+      demoMovement(),
+      {
+        ...demoMovement(),
+        id: 'movement-old-1',
+        createdAt: '2026-03-02T08:00:00.000Z',
+        comment: 'inventory diff check',
+        movementType: 'INVENTORY_DIFF',
+      },
+    ],
+    'ALL',
+    'inventory diff',
+    'OLDEST',
+  );
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 'movement-old-1');
+});
+
+test('selectVisibleStockReportItems applies current stock status filter for export parity', () => {
+  const items = selectVisibleStockReportItems(
+    demoStockReport([
+      { ...demoStockItem(), id: 'stock-ok', name: 'Арбуз', isLowStock: false, currentStock: '10', minStock: '2' },
+      { ...demoStockItem(), id: 'stock-low', name: 'Банан', isLowStock: true, currentStock: '1', minStock: '3' },
+    ]).items,
+    'LOW',
+    'NAME_ASC',
+  );
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].name, 'Банан');
+});
+
+test('selectVisibleAuditLogs applies current search and sort for export parity', () => {
+  const items = selectVisibleAuditLogs(
+    [
+      demoAuditLog(),
+      {
+        ...demoAuditLog(),
+        id: 'audit-old-1',
+        action: 'product.updated',
+        createdAt: '2026-03-01T10:00:00.000Z',
+        payload: {
+          before: { name: 'Cola' },
+          after: { name: 'Cola Zero' },
+        },
+      },
+    ],
+    'после',
+    'OLDEST',
+  );
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 'audit-old-1');
 });
 
 test('ProductsView renders explicit empty states', () => {
