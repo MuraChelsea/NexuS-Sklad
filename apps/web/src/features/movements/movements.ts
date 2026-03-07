@@ -7,9 +7,51 @@ type CreateMovementRequest = OpenApiComponents['schemas']['CreateMovementRequest
 type CreateAdjustmentRequest = OpenApiComponents['schemas']['CreateAdjustmentRequest'];
 type Product = OpenApiComponents['schemas']['Product'];
 
-export async function fetchMovements(accessToken: string): Promise<StockMovement[]> {
+type FetchMovementsFilters = {
+  productId?: string;
+  movementType?: StockMovement['movementType'];
+  limit?: number;
+  offset?: number;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+function buildMovementListPath(filters: FetchMovementsFilters = {}) {
+  const params = new URLSearchParams();
+  if (filters.productId) params.set('productId', filters.productId);
+  if (filters.movementType) params.set('movementType', filters.movementType);
+  if (filters.limit != null) params.set('limit', String(filters.limit));
+  if (filters.offset != null) params.set('offset', String(filters.offset));
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) params.set('dateTo', filters.dateTo);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return `/v1/movements${suffix}`;
+}
+
+export async function fetchMovements(accessToken: string, filters: FetchMovementsFilters = {}): Promise<StockMovement[]> {
   const api = new ApiClient(accessToken);
-  return api.getList<StockMovement>('/v1/movements?limit=30', 'movements');
+  return api.getList<StockMovement>(buildMovementListPath(filters), 'movements');
+}
+
+export async function fetchAllMovements(accessToken: string, filters: Omit<FetchMovementsFilters, 'limit' | 'offset'> = {}) {
+  const pageSize = 100;
+  const items: StockMovement[] = [];
+  let offset = 0;
+
+  while (true) {
+    const batch = await fetchMovements(accessToken, {
+      ...filters,
+      limit: pageSize,
+      offset,
+    });
+    items.push(...batch);
+
+    if (batch.length < pageSize) {
+      return items;
+    }
+
+    offset += batch.length;
+  }
 }
 
 export async function createIncome(

@@ -20,7 +20,7 @@ import {
   createAdjustment,
   createExpense,
   createIncome,
-  fetchMovements,
+  fetchAllMovements,
   sortProducts,
 } from '../features/movements/movements';
 import {
@@ -78,6 +78,7 @@ type AdminData = {
   products: ProductDto[];
   categories: Awaited<ReturnType<typeof fetchCategories>>;
   movements: StockMovementDto[];
+  dailyMovements: StockMovementDto[];
   auditLogs: AuditLogDto[];
 };
 
@@ -94,11 +95,23 @@ type ReportFiltersState = {
   lowOnly: boolean;
 };
 
+type MovementFilter = 'ALL' | 'INCOME' | 'EXPENSE' | 'ADJUSTMENT' | 'INVENTORY_DIFF';
+type MovementSort = 'NEWEST' | 'OLDEST';
+type TeamFilter = 'ALL' | 'ACTIVE' | 'MANAGER' | 'STAFF' | 'INVITED';
+type TeamSort = 'ACTIVE_FIRST' | 'NAME_ASC';
+type InventorySessionFilter = 'ALL' | 'DRAFT' | 'COMPLETED';
+type InventorySessionSort = 'NEWEST' | 'OLDEST';
+type ProductFilter = 'ALL' | 'LOW_STOCK' | 'UNCATEGORIZED';
+type ProductSort = 'LOW_FIRST' | 'NAME_ASC';
+type CategorySort = 'ROOT_FIRST' | 'NAME_ASC';
+type StockReportSort = 'LOW_FIRST' | 'NAME_ASC';
+type StockStatusFilter = 'ALL' | 'LOW' | 'OK';
+
 const DEMO_EMAIL = 'owner@nexussklad.local';
 const DEMO_PASSWORD = 'demo-owner-123';
 
 function normalizeAuditToken(value: string) {
-  return value.toLowerCase().replaceAll(/[_-]+/g, '');
+  return value.toLowerCase().replaceAll(/[^a-z0-9а-яё]+/gi, '');
 }
 
 function formatRoleLabel(role: 'OWNER' | 'MANAGER' | 'STAFF') {
@@ -121,6 +134,225 @@ function formatInventoryStatusLabel(status: string) {
     default:
       return status;
   }
+}
+
+function formatMovementTypeLabel(movementType: StockMovementDto['movementType']) {
+  switch (movementType) {
+    case 'INCOME':
+      return 'Приход';
+    case 'EXPENSE':
+      return 'Расход';
+    case 'ADJUSTMENT':
+      return 'Корректировка';
+    case 'INVENTORY_DIFF':
+      return 'Сверка';
+    default:
+      return 'Операция';
+  }
+}
+
+function resolveUtcDayRange(date: string) {
+  const dayStart = new Date(`${date}T00:00:00.000Z`);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+  dayEnd.setUTCMilliseconds(dayEnd.getUTCMilliseconds() - 1);
+
+  return {
+    dateFrom: dayStart.toISOString(),
+    dateTo: dayEnd.toISOString(),
+  };
+}
+
+function sortMovementsByCreatedAt(movements: StockMovementDto[], sortMode: MovementSort = 'NEWEST') {
+  return [...movements].sort((a, b) => (
+    sortMode === 'OLDEST'
+      ? Date.parse(a.createdAt) - Date.parse(b.createdAt)
+      : Date.parse(b.createdAt) - Date.parse(a.createdAt)
+  ));
+}
+
+function buildMovementSearchText(movement: StockMovementDto) {
+  const compactMovementId = movement.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactProductId = movement.product.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactProductSku = (movement.product.sku ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactCreatedById = movement.createdBy.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactCreatedAt = movement.createdAt.replaceAll(/\D+/g, '');
+  return [
+    movement.id,
+    compactMovementId,
+    movement.createdAt,
+    compactCreatedAt,
+    new Date(movement.createdAt).toLocaleString('ru-RU'),
+    movement.product.name,
+    movement.product.id,
+    compactProductId,
+    movement.product.sku ?? '',
+    compactProductSku,
+    movement.product.unit,
+    movement.createdBy.id,
+    compactCreatedById,
+    movement.createdBy.name,
+    formatRoleLabel(movement.createdBy.role),
+    formatMovementTypeLabel(movement.movementType),
+    movement.comment ?? '',
+    movement.movementType.replaceAll('_', ''),
+    movement.quantity,
+    movement.beforeQty,
+    movement.afterQty,
+  ]
+    .map((value) => String(value ?? ''))
+    .join(' ')
+    .toLowerCase();
+}
+
+function sortInventorySessionsByStartedAt<T extends { startedAt: string }>(
+  sessions: T[],
+  sortMode: InventorySessionSort = 'NEWEST',
+) {
+  return [...sessions].sort((a, b) => (
+    sortMode === 'OLDEST'
+      ? Date.parse(a.startedAt) - Date.parse(b.startedAt)
+      : Date.parse(b.startedAt) - Date.parse(a.startedAt)
+  ));
+}
+
+function sortStockReportItems(items: StockReportDto['items'], sortMode: StockReportSort) {
+  const getDeficit = (item: StockReportDto['items'][number]) => Math.max(0, Number(item.minStock) - Number(item.currentStock));
+  if (sortMode === 'NAME_ASC') {
+    return [...items].sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'));
+  }
+  return [...items].sort((left, right) => {
+    if (left.isLowStock !== right.isLowStock) {
+      return left.isLowStock ? -1 : 1;
+    }
+    const deficitDiff = getDeficit(right) - getDeficit(left);
+    if (deficitDiff !== 0) {
+      return deficitDiff;
+    }
+    return left.name.localeCompare(right.name, 'ru-RU');
+  });
+}
+
+function buildInventorySessionSearchText(session: DailyReportDto['inventory']['sessions'][number]) {
+  const compactStartedAt = session.startedAt.replaceAll(/\D+/g, '');
+  const compactFinishedAt = (session.finishedAt ?? '').replaceAll(/\D+/g, '');
+  const compactSessionId = session.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactStartedById = session.startedBy.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const finishedAtLabel = session.finishedAt ? new Date(session.finishedAt).toLocaleString('ru-RU') : '';
+  return [
+    session.id,
+    compactSessionId,
+    session.id.slice(0, 8),
+    session.startedBy.id,
+    compactStartedById,
+    session.startedBy.name,
+    session.status,
+    formatInventoryStatusLabel(session.status),
+    session.startedAt,
+    compactStartedAt,
+    new Date(session.startedAt).toLocaleString('ru-RU'),
+    session.finishedAt ?? '',
+    compactFinishedAt,
+    finishedAtLabel,
+    session.comment ?? '',
+    `Позиции: ${session._count.items}`,
+    String(session._count.items),
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function buildTeamUserSearchText(user: CompanyUserDto) {
+  const hasInvite = Boolean(user.inviteExpiresAt);
+  const compactUserId = user.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const compactEmail = (user.email ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
+  const phoneDigits = (user.phone ?? '').replaceAll(/\D+/g, '');
+  const statusLabel = user.isActive
+    ? 'Активен'
+    : hasInvite
+      ? 'Ожидает активации'
+      : 'Неактивен';
+  const inviteLabel = hasInvite
+    ? `Приглашение до ${new Date(user.inviteExpiresAt as string).toLocaleDateString('ru-RU')}`
+    : '';
+  const inviteDateRaw = hasInvite ? String(user.inviteExpiresAt) : '';
+  const inviteDateDigits = hasInvite ? String(user.inviteExpiresAt).replaceAll(/\D+/g, '') : '';
+  return [
+    user.id,
+    compactUserId,
+    user.name,
+    user.email ?? '',
+    compactEmail,
+    user.phone ?? '',
+    phoneDigits,
+    user.role,
+    formatRoleLabel(user.role),
+    statusLabel,
+    inviteLabel,
+    inviteDateRaw,
+    inviteDateDigits,
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function sortTeamUsers(users: CompanyUserDto[], sortMode: TeamSort) {
+  if (sortMode === 'NAME_ASC') {
+    return [...users].sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'));
+  }
+  const statusRank = (user: CompanyUserDto) => (
+    user.isActive
+      ? 0
+      : user.inviteExpiresAt
+        ? 1
+        : 2
+  );
+  return [...users].sort((left, right) => {
+    const rankDiff = statusRank(left) - statusRank(right);
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+    return left.name.localeCompare(right.name, 'ru-RU');
+  });
+}
+
+function sortCatalogProducts(products: ProductDto[], sortMode: ProductSort) {
+  const isLowStock = (product: ProductDto) => Number(product.currentStock) <= Number(product.minStock);
+  const getDeficit = (product: ProductDto) => Math.max(0, Number(product.minStock) - Number(product.currentStock));
+  if (sortMode === 'NAME_ASC') {
+    return [...products].sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'));
+  }
+  return [...products].sort((left, right) => {
+    const leftLow = isLowStock(left);
+    const rightLow = isLowStock(right);
+    if (leftLow !== rightLow) {
+      return leftLow ? -1 : 1;
+    }
+    const deficitDiff = getDeficit(right) - getDeficit(left);
+    if (deficitDiff !== 0) {
+      return deficitDiff;
+    }
+    return left.name.localeCompare(right.name, 'ru-RU');
+  });
+}
+
+function sortCategories(categories: CategoryDto[], allCategories: CategoryDto[], sortMode: CategorySort) {
+  const getParentName = (category: CategoryDto) => allCategories.find((item) => item.id === category.parentId)?.name ?? '';
+  if (sortMode === 'NAME_ASC') {
+    return [...categories].sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'));
+  }
+  return [...categories].sort((left, right) => {
+    const leftIsRoot = !left.parentId;
+    const rightIsRoot = !right.parentId;
+    if (leftIsRoot !== rightIsRoot) {
+      return leftIsRoot ? -1 : 1;
+    }
+    const parentDiff = getParentName(left).localeCompare(getParentName(right), 'ru-RU');
+    if (parentDiff !== 0) {
+      return parentDiff;
+    }
+    return left.name.localeCompare(right.name, 'ru-RU');
+  });
 }
 
 function formatEntityTypeLabel(entityType: string) {
@@ -437,7 +669,8 @@ export function App() {
   }
 
   async function loadAdminData(activeSession: SessionState) {
-    const [report, stockReport, company, products, categories, movements, users, auditLogs] = await Promise.all([
+    const movementDayRange = resolveUtcDayRange(reportFilters.date);
+    const [report, stockReport, company, products, categories, movements, dailyMovements, users, auditLogs] = await Promise.all([
       fetchDailyReport(activeSession.accessToken, {
         date: reportFilters.date,
       }),
@@ -449,7 +682,8 @@ export function App() {
       fetchCompany(activeSession.accessToken),
       fetchProducts(activeSession.accessToken),
       fetchCategories(activeSession.accessToken),
-      fetchMovements(activeSession.accessToken),
+      fetchAllMovements(activeSession.accessToken),
+      fetchAllMovements(activeSession.accessToken, movementDayRange),
       activeSession.user.role === 'OWNER' ? fetchUsers(activeSession.accessToken) : Promise.resolve([]),
       activeSession.user.role === 'OWNER'
         ? fetchAuditLogs(activeSession.accessToken, {
@@ -468,6 +702,7 @@ export function App() {
       products: sortProducts(products),
       categories,
       movements,
+      dailyMovements,
       auditLogs,
     });
   }
@@ -605,10 +840,11 @@ export function App() {
               {view === 'dashboard' ? (
                 <DashboardView
                   report={data.report}
+                  movements={data.dailyMovements}
                   selectedDate={reportFilters.date}
                   onDateChange={(date) => setReportFilters((current) => ({ ...current, date }))}
                   lowStockCount={lowStockCount}
-                  movementCount={data.movements.length}
+                  movementCount={data.dailyMovements.length}
                   productCount={data.products.length}
                 />
               ) : null}
@@ -795,7 +1031,7 @@ export function App() {
                   }}
                   onExportMovements={() => {
                     downloadCsv(
-                      buildExportFileName('movements-journal', reportFilters.date ? [reportFilters.date] : []),
+                      buildExportFileName('movements-journal', []),
                       [
                         ['type', 'product', 'actor', 'quantity', 'beforeQty', 'afterQty', 'createdAt'],
                         ...data.movements.map((item) => [
@@ -1078,14 +1314,20 @@ export function LoginForm({
         void onSubmit(email, password);
       }}
     >
-      <label className="field-block"><span className="field-label">Email сотрудника</span><label className="field-block"><span className="field-label">Email</span><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" /></label></label>
-      <input
-        className="input"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Пароль"
-      />
+      <label className="field-block">
+        <span className="field-label">Email сотрудника</span>
+        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+      </label>
+      <label className="field-block">
+        <span className="field-label">Пароль</span>
+        <input
+          className="input"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Пароль"
+        />
+      </label>
       {notice ? <div className="notice">{notice}</div> : null}
       {error ? <div className="error">{error}</div> : null}
       <button className="button" disabled={loading} type="submit">
@@ -1103,21 +1345,98 @@ function NavButton({ active, onClick, label }: { active: boolean; onClick: () =>
   );
 }
 
-function DashboardView({
+export function DashboardView({
   report,
+  movements,
   selectedDate,
   onDateChange,
   lowStockCount,
   movementCount,
   productCount,
+  defaultSessionFilter = 'ALL',
+  defaultSessionSearch = '',
+  defaultSessionSort = 'NEWEST',
+  defaultMovementFilter = 'ALL',
+  defaultMovementSearch = '',
+  defaultMovementSort = 'NEWEST',
 }: {
   report: DailyReportDto;
+  movements: StockMovementDto[];
   selectedDate: string;
   onDateChange: (date: string) => void;
   lowStockCount: number;
   movementCount: number;
   productCount: number;
+  defaultSessionFilter?: InventorySessionFilter;
+  defaultSessionSearch?: string;
+  defaultSessionSort?: InventorySessionSort;
+  defaultMovementFilter?: MovementFilter;
+  defaultMovementSearch?: string;
+  defaultMovementSort?: MovementSort;
 }) {
+  const [sessionFilter, setSessionFilter] = useState<InventorySessionFilter>(defaultSessionFilter);
+  const [sessionSearch, setSessionSearch] = useState(defaultSessionSearch);
+  const [sessionSort, setSessionSort] = useState<InventorySessionSort>(defaultSessionSort);
+  const [movementFilter, setMovementFilter] = useState<MovementFilter>(defaultMovementFilter);
+  const [movementSearch, setMovementSearch] = useState(defaultMovementSearch);
+  const [movementSort, setMovementSort] = useState<MovementSort>(defaultMovementSort);
+  const draftSessions = report.inventory.sessions.filter((session) => session.status !== 'COMPLETED').length;
+  const completedSessions = report.inventory.sessions.filter((session) => session.status === 'COMPLETED').length;
+  const filteredSessions = sessionFilter === 'ALL'
+    ? report.inventory.sessions
+    : report.inventory.sessions.filter((session) => session.status === sessionFilter);
+  const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
+  const compactSessionSearch = normalizeAuditToken(normalizedSessionSearch);
+  const visibleSessions = normalizedSessionSearch
+    ? filteredSessions.filter((session) => {
+      const searchText = buildInventorySessionSearchText(session);
+      if (searchText.includes(normalizedSessionSearch)) {
+        return true;
+      }
+      if (!compactSessionSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactSessionSearch);
+    })
+    : filteredSessions;
+  const orderedSessions = sortInventorySessionsByStartedAt(visibleSessions, sessionSort);
+  const sessionFilterOptions: Array<{ value: InventorySessionFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'DRAFT', label: 'Черновики' },
+    { value: 'COMPLETED', label: 'Завершенные' },
+  ];
+  const movementTypeCounts = movements.reduce<Record<string, number>>((acc, movement) => {
+    acc[movement.movementType] = (acc[movement.movementType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const filteredMovements = movementFilter === 'ALL'
+    ? movements
+    : movements.filter((movement) => movement.movementType === movementFilter);
+  const normalizedMovementSearch = movementSearch.trim().toLowerCase();
+  const compactMovementSearch = normalizeAuditToken(normalizedMovementSearch);
+  const visibleMovements = normalizedMovementSearch
+    ? filteredMovements.filter((movement) => {
+      const searchText = buildMovementSearchText(movement);
+      if (searchText.includes(normalizedMovementSearch)) {
+        return true;
+      }
+      if (!compactMovementSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactMovementSearch);
+    })
+    : filteredMovements;
+  const orderedMovements = sortMovementsByCreatedAt(visibleMovements, movementSort);
+  const movementFilterOptions: Array<{ value: MovementFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'INCOME', label: 'Приход' },
+    { value: 'EXPENSE', label: 'Расход' },
+    { value: 'ADJUSTMENT', label: 'Корректировка' },
+    { value: 'INVENTORY_DIFF', label: 'Сверка' },
+  ];
+  const hasActiveSessionControls = sessionFilter !== 'ALL' || sessionSearch.length > 0;
+  const hasActiveMovementControls = movementFilter !== 'ALL' || movementSearch.length > 0;
+
   return (
     <>
       <section className="metrics-grid">
@@ -1141,15 +1460,88 @@ function DashboardView({
             <div className="badge">Дата: {report.date}</div>
           </div>
         </div>
+        {report.inventory.sessions.length > 0 ? (
+          <>
+            <div className="toolbar audit-insights">
+              <div className="badge">Сессий: {report.inventory.sessions.length}</div>
+              <div className="badge">Черновики: {draftSessions}</div>
+              <div className="badge">Завершено: {completedSessions}</div>
+            </div>
+            <div className="filter-panel inventory-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                {sessionFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`button-ghost quick-filter-button${sessionFilter === option.value ? ' active' : ''}`}
+                    onClick={() => setSessionFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder="Поиск по ID, сотруднику, статусу, дате, комментарию или позициям"
+                />
+                {sessionSearch ? (
+                  <button className="button-ghost" onClick={() => setSessionSearch('')}>Очистить поиск</button>
+                ) : null}
+                {hasActiveSessionControls ? (
+                  <button
+                    className="button-ghost"
+                    onClick={() => {
+                      setSessionFilter('ALL');
+                      setSessionSearch('');
+                    }}
+                  >
+                    Сбросить всё
+                  </button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'NEWEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('NEWEST')}
+                >
+                  Сначала новые
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'OLDEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('OLDEST')}
+                >
+                  Сначала старые
+                </button>
+              </div>
+            </div>
+          </>
+        ) : null}
         {report.inventory.sessions.length === 0 ? (
           <InlineState
             title="За выбранный день операций нет"
             message="Проведи приход, расход или инвентаризацию, чтобы сводка за день начала заполняться."
           />
+        ) : visibleSessions.length === 0 ? (
+          normalizedSessionSearch ? (
+            <InlineState
+              title="Поиск не дал сессий в сводке дня"
+              message="Очисти поиск или выбери другой статус сессий."
+              actionLabel="Очистить поиск"
+              onAction={() => setSessionSearch('')}
+            />
+          ) : (
+            <InlineState
+              title="По выбранному фильтру сессий нет"
+              message="В сводке есть сессии, но не в выбранном статусе."
+              actionLabel="Сбросить фильтр"
+              onAction={() => setSessionFilter('ALL')}
+            />
+          )
         ) : (
           <table>
             <thead>
               <tr>
+                <th>Когда</th>
                 <th>Сессия</th>
                 <th>Статус</th>
                 <th>Сотрудник</th>
@@ -1157,13 +1549,122 @@ function DashboardView({
               </tr>
             </thead>
             <tbody>
-              {report.inventory.sessions.map((session) => (
+              {orderedSessions.map((session) => (
                 <tr key={session.id}>
+                  <td>{new Date(session.startedAt).toLocaleString('ru-RU')}</td>
                   <td>{session.id.slice(0, 8)}</td>
                   <td>{formatInventoryStatusLabel(session.status)}</td>
                   <td>{session.startedBy.name}</td>
                   <td>{session._count.items}</td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+      <section className="table-card">
+        <div className="toolbar">
+          <div className="toolbar-title">
+            <div className="section-label">Операции за день</div>
+            <h3 style={{ margin: 0 }}>Движения по складу</h3>
+          </div>
+          <div className="toolbar-actions">
+            <div className="badge">Дата: {report.date}</div>
+          </div>
+        </div>
+        {movements.length > 0 ? (
+          <>
+            <div className="toolbar audit-insights">
+              <div className="badge">Записей: {movements.length}</div>
+              <div className="badge">Приходов: {movementTypeCounts.INCOME ?? 0}</div>
+              <div className="badge">Расходов: {movementTypeCounts.EXPENSE ?? 0}</div>
+              <div className="badge">Корректировок: {movementTypeCounts.ADJUSTMENT ?? 0}</div>
+              <div className="badge">Сверок: {movementTypeCounts.INVENTORY_DIFF ?? 0}</div>
+            </div>
+            <div className="filter-panel movement-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                {movementFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`button-ghost quick-filter-button${movementFilter === option.value ? ' active' : ''}`}
+                    onClick={() => setMovementFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={movementSearch}
+                  onChange={(event) => setMovementSearch(event.target.value)}
+                  placeholder="Поиск по товару, SKU, единице, ID, сотруднику, роли, типу, количеству, дате или комментарию"
+                />
+                {movementSearch ? (
+                  <button className="button-ghost" onClick={() => setMovementSearch('')}>Очистить поиск</button>
+                ) : null}
+                {hasActiveMovementControls ? (
+                  <button
+                    className="button-ghost"
+                    onClick={() => {
+                      setMovementFilter('ALL');
+                      setMovementSearch('');
+                    }}
+                  >
+                    Сбросить всё
+                  </button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${movementSort === 'NEWEST' ? ' active' : ''}`}
+                  onClick={() => setMovementSort('NEWEST')}
+                >
+                  Сначала новые
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${movementSort === 'OLDEST' ? ' active' : ''}`}
+                  onClick={() => setMovementSort('OLDEST')}
+                >
+                  Сначала старые
+                </button>
+              </div>
+            </div>
+          </>
+        ) : null}
+        {movements.length === 0 ? (
+          <InlineState
+            title="За выбранный день движений нет"
+            message="Проведи приход, расход или корректировку, чтобы увидеть операции в сводке дня."
+          />
+        ) : visibleMovements.length === 0 ? (
+          normalizedMovementSearch ? (
+            <InlineState
+              title="Поиск не дал движений в сводке дня"
+              message="Очисти поиск или выбери другой тип операций."
+              actionLabel="Очистить поиск"
+              onAction={() => setMovementSearch('')}
+            />
+          ) : (
+            <InlineState
+              title="По выбранному фильтру движений нет"
+              message="В сводке есть движения, но не выбранного типа."
+              actionLabel="Сбросить фильтр"
+              onAction={() => setMovementFilter('ALL')}
+            />
+          )
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Когда</th>
+                <th>Тип</th>
+                <th>Товар</th>
+                <th>Сотрудник</th>
+                <th>Кол-во</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderedMovements.map((movement) => (
+                <MovementTableRow key={movement.id} movement={movement} />
               ))}
             </tbody>
           </table>
@@ -1242,6 +1743,11 @@ export function ProductsView({
   onDeleteProduct,
   onDeleteCategory,
   onExportProducts,
+  defaultFilter = 'ALL',
+  defaultSearch = '',
+  defaultCategorySearch = '',
+  defaultSort = 'LOW_FIRST',
+  defaultCategorySort = 'ROOT_FIRST',
 }: {
   isOwner: boolean;
   products: ProductDto[];
@@ -1254,10 +1760,97 @@ export function ProductsView({
   onDeleteProduct: (product: ProductDto) => void;
   onDeleteCategory: (category: CategoryDto) => void;
   onExportProducts: () => void;
+  defaultFilter?: ProductFilter;
+  defaultSearch?: string;
+  defaultCategorySearch?: string;
+  defaultSort?: ProductSort;
+  defaultCategorySort?: CategorySort;
 }) {
+  const [productFilter, setProductFilter] = useState<ProductFilter>(defaultFilter);
+  const [productSearch, setProductSearch] = useState(defaultSearch);
+  const [categorySearch, setCategorySearch] = useState(defaultCategorySearch);
+  const [productSort, setProductSort] = useState<ProductSort>(defaultSort);
+  const [categorySort, setCategorySort] = useState<CategorySort>(defaultCategorySort);
   const lowStockProducts = products.filter((product) => Number(product.currentStock) <= Number(product.minStock)).length;
   const uncategorizedProducts = products.filter((product) => !product.categoryId).length;
   const rootCategories = categories.filter((category) => !category.parentId).length;
+  const filteredProducts = products.filter((product) => {
+    switch (productFilter) {
+      case 'LOW_STOCK':
+        return Number(product.currentStock) <= Number(product.minStock);
+      case 'UNCATEGORIZED':
+        return !product.categoryId;
+      case 'ALL':
+      default:
+        return true;
+    }
+  });
+  const normalizedSearch = productSearch.trim().toLowerCase();
+  const compactProductSearch = normalizeAuditToken(normalizedSearch);
+  const visibleProducts = normalizedSearch
+    ? filteredProducts.filter((product) => {
+      const compactProductId = product.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const compactSku = (product.sku ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const barcodeDigits = (product.barcode ?? '').replaceAll(/\D+/g, '');
+      const searchValues = [
+        product.id,
+        compactProductId,
+        product.name,
+        product.sku ?? '',
+        compactSku,
+        product.barcode ?? '',
+        barcodeDigits,
+        product.category?.name ?? '',
+        product.unit,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (searchValues.includes(normalizedSearch)) {
+        return true;
+      }
+      if (!compactProductSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchValues).includes(compactProductSearch);
+    })
+    : filteredProducts;
+  const orderedProducts = sortCatalogProducts(visibleProducts, productSort);
+  const productFilterOptions: Array<{ value: ProductFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'LOW_STOCK', label: 'Низкий остаток' },
+    { value: 'UNCATEGORIZED', label: 'Без категории' },
+  ];
+  const normalizedCategorySearch = categorySearch.trim().toLowerCase();
+  const compactCategorySearch = normalizeAuditToken(normalizedCategorySearch);
+  const visibleCategories = normalizedCategorySearch
+    ? categories.filter((category) => {
+      const parentName = categories.find((item) => item.id === category.parentId)?.name ?? '';
+      const compactCategoryId = category.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const compactParentId = (category.parentId ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const compactCategoryName = category.name.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const compactParentName = parentName.replaceAll(/[^a-z0-9а-яё]+/gi, '');
+      const searchValues = [
+        category.id,
+        compactCategoryId,
+        category.parentId ?? '',
+        compactParentId,
+        category.name,
+        compactCategoryName,
+        parentName,
+        compactParentName,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (searchValues.includes(normalizedCategorySearch)) {
+        return true;
+      }
+      if (!compactCategorySearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchValues).includes(compactCategorySearch);
+    })
+    : categories;
+  const orderedCategories = sortCategories(visibleCategories, categories, categorySort);
 
   return (
     <>
@@ -1277,6 +1870,55 @@ export function ProductsView({
           <div className={`badge ${lowStockProducts > 0 ? 'warn' : ''}`}>Низкий остаток: {lowStockProducts}</div>
           <div className={`badge ${uncategorizedProducts > 0 ? 'warn' : ''}`}>Без категории: {uncategorizedProducts}</div>
         </div>
+        {products.length > 0 ? (
+          <div className="filter-panel product-filter-panel">
+            <div className="toolbar-actions toolbar-filters">
+              {productFilterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  className={`button-ghost quick-filter-button${productFilter === option.value ? ' active' : ''}`}
+                  onClick={() => setProductFilter(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="toolbar-actions toolbar-filters">
+              <input
+                className="input input-compact"
+                value={productSearch}
+                onChange={(event) => setProductSearch(event.target.value)}
+                placeholder="Поиск по ID, названию, SKU, штрихкоду, категории или единице"
+              />
+              {productSearch ? (
+                <button className="button-ghost" onClick={() => setProductSearch('')}>Очистить поиск</button>
+              ) : null}
+              {(productFilter !== 'ALL' || productSearch) ? (
+                <button
+                  className="button-ghost"
+                  onClick={() => {
+                    setProductFilter('ALL');
+                    setProductSearch('');
+                  }}
+                >
+                  Сбросить всё
+                </button>
+              ) : null}
+              <button
+                className={`button-ghost quick-filter-button${productSort === 'LOW_FIRST' ? ' active' : ''}`}
+                onClick={() => setProductSort('LOW_FIRST')}
+              >
+                Риск сначала
+              </button>
+              <button
+                className={`button-ghost quick-filter-button${productSort === 'NAME_ASC' ? ' active' : ''}`}
+                onClick={() => setProductSort('NAME_ASC')}
+              >
+                По названию
+              </button>
+            </div>
+          </div>
+        ) : null}
         {products.length === 0 ? (
           <InlineState
             title="Товаров пока нет"
@@ -1288,6 +1930,22 @@ export function ProductsView({
             actionLabel={canManage ? 'Создать товар' : undefined}
             onAction={canManage ? onCreate : undefined}
           />
+        ) : visibleProducts.length === 0 ? (
+          normalizedSearch ? (
+            <InlineState
+              title="Поиск не дал товаров по текущему фильтру."
+              message="Очисти поиск или выбери другой фильтр каталога."
+              actionLabel="Очистить поиск"
+              onAction={() => setProductSearch('')}
+            />
+          ) : (
+            <InlineState
+              title="По выбранному фильтру товаров нет"
+              message="В каталоге есть позиции, но в этом срезе пока пусто."
+              actionLabel="Сбросить фильтр"
+              onAction={() => setProductFilter('ALL')}
+            />
+          )
         ) : (
           <table>
             <thead>
@@ -1300,7 +1958,7 @@ export function ProductsView({
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => {
+              {orderedProducts.map((product) => {
                 const low = Number(product.currentStock) <= Number(product.minStock);
                 return (
                   <ProductTableRow
@@ -1339,30 +1997,91 @@ export function ProductsView({
             actionLabel={canManage ? 'Создать категорию' : undefined}
             onAction={canManage ? onCreateCategory : undefined}
           />
+        ) : visibleCategories.length === 0 ? (
+          <>
+            <div className="filter-panel category-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={categorySearch}
+                  onChange={(event) => setCategorySearch(event.target.value)}
+                  placeholder="Поиск по ID, категории или родителю"
+                />
+                {categorySearch ? (
+                  <button className="button-ghost" onClick={() => setCategorySearch('')}>Очистить поиск</button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${categorySort === 'ROOT_FIRST' ? ' active' : ''}`}
+                  onClick={() => setCategorySort('ROOT_FIRST')}
+                >
+                  Корневые сначала
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${categorySort === 'NAME_ASC' ? ' active' : ''}`}
+                  onClick={() => setCategorySort('NAME_ASC')}
+                >
+                  По названию
+                </button>
+              </div>
+            </div>
+            <InlineState
+              title="Поиск не дал категорий"
+              message="Измени запрос или очисти поиск, чтобы увидеть все категории."
+              actionLabel="Очистить поиск"
+              onAction={() => setCategorySearch('')}
+            />
+          </>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Название</th>
-                <th>Родительская категория</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((category) => (
-                <tr key={category.id}>
-                  <td>{category.name}</td>
-                  <td>{categories.find((item) => item.id === category.parentId)?.name ?? '—'}</td>
-                  <td>
-                    <div className="actions-row">
-                      {canManage ? <button className="button-ghost" onClick={() => onEditCategory(category)}>Редактировать</button> : null}
-                      {isOwner ? <button className="button-danger" onClick={() => onDeleteCategory(category)}>Удалить</button> : null}
-                    </div>
-                  </td>
+          <>
+            <div className="filter-panel category-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={categorySearch}
+                  onChange={(event) => setCategorySearch(event.target.value)}
+                  placeholder="Поиск по ID, категории или родителю"
+                />
+                {categorySearch ? (
+                  <button className="button-ghost" onClick={() => setCategorySearch('')}>Очистить поиск</button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${categorySort === 'ROOT_FIRST' ? ' active' : ''}`}
+                  onClick={() => setCategorySort('ROOT_FIRST')}
+                >
+                  Корневые сначала
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${categorySort === 'NAME_ASC' ? ' active' : ''}`}
+                  onClick={() => setCategorySort('NAME_ASC')}
+                >
+                  По названию
+                </button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th>Родительская категория</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {orderedCategories.map((category) => (
+                  <tr key={category.id}>
+                    <td>{category.name}</td>
+                    <td>{categories.find((item) => item.id === category.parentId)?.name ?? '—'}</td>
+                    <td>
+                      <div className="actions-row">
+                        {canManage ? <button className="button-ghost" onClick={() => onEditCategory(category)}>Редактировать</button> : null}
+                        {isOwner ? <button className="button-danger" onClick={() => onDeleteCategory(category)}>Удалить</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
     </>
@@ -1375,17 +2094,51 @@ export function MovementsView({
   canAdjust,
   onCreate,
   onExport,
+  defaultFilter = 'ALL',
+  defaultSearch = '',
+  defaultSort = 'NEWEST',
 }: {
   products: ProductDto[];
   movements: StockMovementDto[];
   canAdjust: boolean;
   onCreate: (kind: 'income' | 'expense' | 'adjustment') => void;
   onExport: () => void;
+  defaultFilter?: MovementFilter;
+  defaultSearch?: string;
+  defaultSort?: MovementSort;
 }) {
+  const [movementFilter, setMovementFilter] = useState<MovementFilter>(defaultFilter);
+  const [movementSearch, setMovementSearch] = useState(defaultSearch);
+  const [movementSort, setMovementSort] = useState<MovementSort>(defaultSort);
   const movementTypeCounts = movements.reduce<Record<string, number>>((acc, movement) => {
     acc[movement.movementType] = (acc[movement.movementType] ?? 0) + 1;
     return acc;
   }, {});
+  const filteredMovements = movementFilter === 'ALL'
+    ? movements
+    : movements.filter((movement) => movement.movementType === movementFilter);
+  const normalizedSearch = movementSearch.trim().toLowerCase();
+  const compactMovementSearch = normalizeAuditToken(normalizedSearch);
+  const visibleMovements = normalizedSearch
+    ? filteredMovements.filter((movement) => {
+      const searchText = buildMovementSearchText(movement);
+      if (searchText.includes(normalizedSearch)) {
+        return true;
+      }
+      if (!compactMovementSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactMovementSearch);
+    })
+    : filteredMovements;
+  const orderedMovements = sortMovementsByCreatedAt(visibleMovements, movementSort);
+  const movementFilterOptions: Array<{ value: MovementFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'INCOME', label: 'Приход' },
+    { value: 'EXPENSE', label: 'Расход' },
+    { value: 'ADJUSTMENT', label: 'Корректировка' },
+    { value: 'INVENTORY_DIFF', label: 'Сверка' },
+  ];
 
   return (
     <section className="table-card">
@@ -1401,12 +2154,60 @@ export function MovementsView({
           <button className="button-ghost" onClick={onExport}>Экспорт CSV</button>
         </div>
       </div>
-        <div className="toolbar audit-insights">
-          <div className="badge">Записей: {movements.length}</div>
-          <div className="badge">Приходов: {movementTypeCounts.INCOME ?? 0}</div>
-          <div className="badge">Расходов: {movementTypeCounts.EXPENSE ?? 0}</div>
-          {canAdjust ? <div className="badge">Корректировок: {movementTypeCounts.ADJUSTMENT ?? 0}</div> : null}
+      <div className="toolbar audit-insights">
+        <div className="badge">Записей: {movements.length}</div>
+        <div className="badge">Приходов: {movementTypeCounts.INCOME ?? 0}</div>
+        <div className="badge">Расходов: {movementTypeCounts.EXPENSE ?? 0}</div>
+        <div className="badge">Корректировок: {movementTypeCounts.ADJUSTMENT ?? 0}</div>
+        <div className="badge">Сверок: {movementTypeCounts.INVENTORY_DIFF ?? 0}</div>
+      </div>
+      <div className="filter-panel movement-filter-panel">
+        <div className="toolbar-actions toolbar-filters">
+          {movementFilterOptions.map((option) => (
+            <button
+              key={option.value}
+              className={`button-ghost quick-filter-button${movementFilter === option.value ? ' active' : ''}`}
+              onClick={() => setMovementFilter(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
+        <div className="toolbar-actions toolbar-filters">
+          <input
+            className="input input-compact"
+            value={movementSearch}
+            onChange={(event) => setMovementSearch(event.target.value)}
+            placeholder="Поиск по товару, SKU, единице, ID, сотруднику, роли, типу, количеству, дате или комментарию"
+          />
+          {movementSearch ? (
+            <button className="button-ghost" onClick={() => setMovementSearch('')}>Очистить поиск</button>
+          ) : null}
+          {(movementFilter !== 'ALL' || movementSearch) ? (
+            <button
+              className="button-ghost"
+              onClick={() => {
+                setMovementFilter('ALL');
+                setMovementSearch('');
+              }}
+            >
+              Сбросить всё
+            </button>
+          ) : null}
+          <button
+            className={`button-ghost quick-filter-button${movementSort === 'NEWEST' ? ' active' : ''}`}
+            onClick={() => setMovementSort('NEWEST')}
+          >
+            Сначала новые
+          </button>
+          <button
+            className={`button-ghost quick-filter-button${movementSort === 'OLDEST' ? ' active' : ''}`}
+            onClick={() => setMovementSort('OLDEST')}
+          >
+            Сначала старые
+          </button>
+        </div>
+      </div>
       {movements.length === 0 ? (
         <InlineState
           title="Движений пока нет"
@@ -1418,10 +2219,27 @@ export function MovementsView({
           actionLabel={products.length > 0 ? 'Создать приход' : undefined}
           onAction={products.length > 0 ? () => onCreate('income') : undefined}
         />
+      ) : visibleMovements.length === 0 ? (
+        normalizedSearch ? (
+          <InlineState
+            title="Поиск не дал движений по текущему фильтру."
+            message="Очисти поиск или выбери другой тип операций."
+            actionLabel="Очистить поиск"
+            onAction={() => setMovementSearch('')}
+          />
+        ) : (
+          <InlineState
+            title="По выбранному фильтру движений нет"
+            message="В журнале есть операции, но для этого типа записей пока нет."
+            actionLabel="Сбросить фильтр"
+            onAction={() => setMovementFilter('ALL')}
+          />
+        )
       ) : (
         <table>
           <thead>
             <tr>
+              <th>Когда</th>
               <th>Тип</th>
               <th>Товар</th>
               <th>Сотрудник</th>
@@ -1429,7 +2247,7 @@ export function MovementsView({
             </tr>
           </thead>
           <tbody>
-            {movements.map((movement) => (
+            {orderedMovements.map((movement) => (
               <MovementTableRow key={movement.id} movement={movement} />
             ))}
           </tbody>
@@ -1449,6 +2267,11 @@ export function InventoryView({
   onStart,
   onOpenSession,
   onExportStock,
+  defaultSessionFilter = 'ALL',
+  defaultSessionSearch = '',
+  defaultSessionSort = 'NEWEST',
+  defaultStockSort = 'LOW_FIRST',
+  defaultStockStatusFilter = 'ALL',
 }: {
   report: DailyReportDto;
   stockReport: StockReportDto;
@@ -1459,11 +2282,54 @@ export function InventoryView({
   onStart: () => void;
   onOpenSession: (inventoryId: string) => void;
   onExportStock: () => void;
+  defaultSessionFilter?: InventorySessionFilter;
+  defaultSessionSearch?: string;
+  defaultSessionSort?: InventorySessionSort;
+  defaultStockSort?: StockReportSort;
+  defaultStockStatusFilter?: StockStatusFilter;
 }) {
+  const [sessionFilter, setSessionFilter] = useState<InventorySessionFilter>(defaultSessionFilter);
+  const [sessionSearch, setSessionSearch] = useState(defaultSessionSearch);
+  const [sessionSort, setSessionSort] = useState<InventorySessionSort>(defaultSessionSort);
+  const [stockSort, setStockSort] = useState<StockReportSort>(defaultStockSort);
+  const [stockStatusFilter, setStockStatusFilter] = useState<StockStatusFilter>(defaultStockStatusFilter);
   const reportFilterBadges = collectReportFilterBadges(filters, categories);
   const draftSessions = report.inventory.sessions.filter((session) => session.status !== 'COMPLETED').length;
   const completedSessions = report.inventory.sessions.filter((session) => session.status === 'COMPLETED').length;
+  const filteredSessions = sessionFilter === 'ALL'
+    ? report.inventory.sessions
+    : report.inventory.sessions.filter((session) => session.status === sessionFilter);
+  const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
+  const compactSessionSearch = normalizeAuditToken(normalizedSessionSearch);
+  const visibleSessions = normalizedSessionSearch
+    ? filteredSessions.filter((session) => {
+      const searchText = buildInventorySessionSearchText(session);
+      if (searchText.includes(normalizedSessionSearch)) {
+        return true;
+      }
+      if (!compactSessionSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactSessionSearch);
+    })
+    : filteredSessions;
+  const orderedSessions = sortInventorySessionsByStartedAt(visibleSessions, sessionSort);
   const hasActiveStockFilters = Boolean(filters.stockSearch || filters.stockCategoryId || filters.lowOnly);
+  const filteredStockItems = stockStatusFilter === 'ALL'
+    ? stockReport.items
+    : stockReport.items.filter((item) => (stockStatusFilter === 'LOW' ? item.isLowStock : !item.isLowStock));
+  const orderedStockItems = sortStockReportItems(filteredStockItems, stockSort);
+  const sessionFilterOptions: Array<{ value: InventorySessionFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'DRAFT', label: 'Черновики' },
+    { value: 'COMPLETED', label: 'Завершенные' },
+  ];
+  const stockStatusFilterOptions: Array<{ value: StockStatusFilter; label: string }> = [
+    { value: 'ALL', label: 'Все позиции' },
+    { value: 'LOW', label: 'Низкий остаток' },
+    { value: 'OK', label: 'В норме' },
+  ];
+  const hasActiveSessionControls = sessionFilter !== 'ALL' || sessionSearch.length > 0;
   return (
     <>
       <section className="metrics-grid">
@@ -1494,27 +2360,142 @@ export function InventoryView({
             actionLabel={canManage ? 'Запустить сессию' : undefined}
             onAction={canManage ? onStart : undefined}
           />
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Статус</th>
-                <th>Сотрудник</th>
-                <th>Позиций</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.inventory.sessions.map((session) => (
-                <InventorySessionRow
-                  key={session.id}
-                  session={session}
-                  onOpen={() => onOpenSession(session.id)}
+        ) : visibleSessions.length === 0 ? (
+          <>
+            <div className="filter-panel inventory-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                {sessionFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`button-ghost quick-filter-button${sessionFilter === option.value ? ' active' : ''}`}
+                    onClick={() => setSessionFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder="Поиск по ID, сотруднику, статусу, дате, комментарию или позициям"
                 />
-              ))}
-            </tbody>
-          </table>
+                {sessionSearch ? (
+                  <button className="button-ghost" onClick={() => setSessionSearch('')}>Очистить поиск</button>
+                ) : null}
+                {hasActiveSessionControls ? (
+                  <button
+                    className="button-ghost"
+                    onClick={() => {
+                      setSessionFilter('ALL');
+                      setSessionSearch('');
+                    }}
+                  >
+                    Сбросить всё
+                  </button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'NEWEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('NEWEST')}
+                >
+                  Сначала новые
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'OLDEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('OLDEST')}
+                >
+                  Сначала старые
+                </button>
+              </div>
+            </div>
+            {normalizedSessionSearch ? (
+              <InlineState
+                title="Поиск не дал сессий по текущему фильтру."
+                message="Очисти поиск или выбери другой статус сессий."
+                actionLabel="Очистить поиск"
+                onAction={() => setSessionSearch('')}
+              />
+            ) : (
+              <InlineState
+                title="По выбранному фильтру сессий нет"
+                message="В списке есть другие сессии инвентаризации, но не в этом статусе."
+                actionLabel="Сбросить фильтр"
+                onAction={() => setSessionFilter('ALL')}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <div className="filter-panel inventory-filter-panel">
+              <div className="toolbar-actions toolbar-filters">
+                {sessionFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`button-ghost quick-filter-button${sessionFilter === option.value ? ' active' : ''}`}
+                    onClick={() => setSessionFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="toolbar-actions toolbar-filters">
+                <input
+                  className="input input-compact"
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder="Поиск по ID, сотруднику, статусу, дате, комментарию или позициям"
+                />
+                {sessionSearch ? (
+                  <button className="button-ghost" onClick={() => setSessionSearch('')}>Очистить поиск</button>
+                ) : null}
+                {hasActiveSessionControls ? (
+                  <button
+                    className="button-ghost"
+                    onClick={() => {
+                      setSessionFilter('ALL');
+                      setSessionSearch('');
+                    }}
+                  >
+                    Сбросить всё
+                  </button>
+                ) : null}
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'NEWEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('NEWEST')}
+                >
+                  Сначала новые
+                </button>
+                <button
+                  className={`button-ghost quick-filter-button${sessionSort === 'OLDEST' ? ' active' : ''}`}
+                  onClick={() => setSessionSort('OLDEST')}
+                >
+                  Сначала старые
+                </button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>ID</th>
+                  <th>Статус</th>
+                  <th>Сотрудник</th>
+                  <th>Позиций</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {orderedSessions.map((session) => (
+                  <InventorySessionRow
+                    key={session.id}
+                    session={session}
+                    onOpen={() => onOpenSession(session.id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
 
@@ -1549,7 +2530,7 @@ export function InventoryView({
               className="input input-compact"
               value={filters.stockSearch}
               onChange={(event) => onChangeFilters({ stockSearch: event.target.value })}
-              placeholder="Поиск по товару / SKU"
+              placeholder="Поиск по товару / SKU / штрихкоду"
             />
             <select
               className="select input-compact"
@@ -1577,12 +2558,40 @@ export function InventoryView({
                 Сбросить фильтры
               </button>
             ) : null}
+            {stockStatusFilterOptions.map((option) => (
+              <button
+                key={option.value}
+                className={`button-ghost quick-filter-button${stockStatusFilter === option.value ? ' active' : ''}`}
+                onClick={() => setStockStatusFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+            <button
+              className={`button-ghost quick-filter-button${stockSort === 'LOW_FIRST' ? ' active' : ''}`}
+              onClick={() => setStockSort('LOW_FIRST')}
+            >
+              Риск сначала
+            </button>
+            <button
+              className={`button-ghost quick-filter-button${stockSort === 'NAME_ASC' ? ' active' : ''}`}
+              onClick={() => setStockSort('NAME_ASC')}
+            >
+              По названию
+            </button>
           </div>
         </div>
         {stockReport.items.length === 0 ? (
           <InlineState
             title="По текущим фильтрам позиций нет"
             message="Сними фильтры или добавь товары, чтобы увидеть отчет по остаткам."
+          />
+        ) : orderedStockItems.length === 0 ? (
+          <InlineState
+            title="По выбранному статусу позиций нет"
+            message="В отчете есть позиции, но не в выбранном статусе."
+            actionLabel="Сбросить статус"
+            onAction={() => setStockStatusFilter('ALL')}
           />
         ) : (
           <table>
@@ -1595,7 +2604,7 @@ export function InventoryView({
               </tr>
             </thead>
             <tbody>
-              {stockReport.items.map((item) => (
+              {orderedStockItems.map((item) => (
                 <StockReportRow key={item.id} item={item} />
               ))}
             </tbody>
@@ -1613,6 +2622,9 @@ export function TeamView({
   onEditCompany,
   onInvite,
   onEditUser,
+  defaultFilter = 'ALL',
+  defaultSearch = '',
+  defaultSort = 'ACTIVE_FIRST',
 }: {
   company: CompanyDto;
   users: CompanyUserDto[];
@@ -1620,11 +2632,45 @@ export function TeamView({
   onEditCompany: () => void;
   onInvite: () => void;
   onEditUser: (user: CompanyUserDto) => void;
+  defaultFilter?: TeamFilter;
+  defaultSearch?: string;
+  defaultSort?: TeamSort;
 }) {
+  const [teamFilter, setTeamFilter] = useState<TeamFilter>(defaultFilter);
+  const [teamSearch, setTeamSearch] = useState(defaultSearch);
+  const [teamSort, setTeamSort] = useState<TeamSort>(defaultSort);
   const activeUsers = users.filter((user) => user.isActive).length;
   const inactiveUsers = users.length - activeUsers;
   const managers = users.filter((user) => user.role === 'MANAGER').length;
   const staff = users.filter((user) => user.role === 'STAFF').length;
+  const hasInvites = users.some((user) => Boolean(user.inviteExpiresAt));
+  const teamFilterOptions: Array<{ value: TeamFilter; label: string }> = [
+    { value: 'ALL', label: 'Все' },
+    { value: 'ACTIVE', label: 'Активные' },
+    { value: 'MANAGER', label: 'Менеджеры' },
+    { value: 'STAFF', label: 'Сотрудники' },
+    { value: 'INVITED', label: 'Приглашения' },
+  ];
+  const normalizedSearch = teamSearch.trim().toLowerCase();
+  const filteredUsers = users.filter((user) => {
+    switch (teamFilter) {
+      case 'ACTIVE':
+        return user.isActive;
+      case 'MANAGER':
+        return user.role === 'MANAGER';
+      case 'STAFF':
+        return user.role === 'STAFF';
+      case 'INVITED':
+        return Boolean(user.inviteExpiresAt);
+      case 'ALL':
+      default:
+        return true;
+    }
+  });
+  const visibleUsers = normalizedSearch
+    ? filteredUsers.filter((user) => buildTeamUserSearchText(user).includes(normalizedSearch))
+    : filteredUsers;
+  const orderedUsers = sortTeamUsers(visibleUsers, teamSort);
 
   return (
     <>
@@ -1643,6 +2689,7 @@ export function TeamView({
             <div className="badge">Активных: {activeUsers}</div>
             <div className="badge">Менеджеров: {managers}</div>
             <div className="badge">Сотрудников склада: {staff}</div>
+            {hasInvites ? <div className="badge">Приглашений: {users.filter((user) => Boolean(user.inviteExpiresAt)).length}</div> : null}
             {inactiveUsers > 0 ? <div className="badge warn">Неактивных: {inactiveUsers}</div> : null}
           </div>
         ) : null}
@@ -1655,26 +2702,93 @@ export function TeamView({
               onAction={onInvite}
             />
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Имя</th>
-                  <th>Email</th>
-                  <th>Роль</th>
-                  <th>Статус</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <TeamUserRow
-                    key={user.id}
-                    user={user}
-                    onEdit={() => onEditUser(user)}
+            <>
+              <div className="filter-panel team-filter-panel">
+                <div className="toolbar-actions toolbar-filters">
+                  {teamFilterOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      className={`button-ghost quick-filter-button${teamFilter === option.value ? ' active' : ''}`}
+                      onClick={() => setTeamFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="toolbar-actions toolbar-filters">
+                  <input
+                    className="input input-compact"
+                    value={teamSearch}
+                    onChange={(event) => setTeamSearch(event.target.value)}
+                    placeholder="Поиск по имени, email, телефону, роли, статусу, ID или дате приглашения"
                   />
-                ))}
-              </tbody>
-            </table>
+                  {teamSearch ? (
+                    <button className="button-ghost" onClick={() => setTeamSearch('')}>Очистить поиск</button>
+                  ) : null}
+                  {(teamFilter !== 'ALL' || teamSearch) ? (
+                    <button
+                      className="button-ghost"
+                      onClick={() => {
+                        setTeamFilter('ALL');
+                        setTeamSearch('');
+                      }}
+                    >
+                      Сбросить всё
+                    </button>
+                  ) : null}
+                  <button
+                    className={`button-ghost quick-filter-button${teamSort === 'ACTIVE_FIRST' ? ' active' : ''}`}
+                    onClick={() => setTeamSort('ACTIVE_FIRST')}
+                  >
+                    Активные сначала
+                  </button>
+                  <button
+                    className={`button-ghost quick-filter-button${teamSort === 'NAME_ASC' ? ' active' : ''}`}
+                    onClick={() => setTeamSort('NAME_ASC')}
+                  >
+                    По имени
+                  </button>
+                </div>
+              </div>
+              {visibleUsers.length === 0 ? (
+                normalizedSearch ? (
+                  <InlineState
+                    title="Поиск не дал сотрудников по текущему фильтру."
+                    message="Очисти поиск или выбери другой фильтр команды."
+                    actionLabel="Очистить поиск"
+                    onAction={() => setTeamSearch('')}
+                  />
+                ) : (
+                  <InlineState
+                    title="По выбранному фильтру сотрудников нет"
+                    message="В команде есть сотрудники, но в этом срезе список сейчас пуст."
+                    actionLabel="Сбросить фильтр"
+                    onAction={() => setTeamFilter('ALL')}
+                  />
+                )
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Имя</th>
+                      <th>Email</th>
+                      <th>Роль</th>
+                      <th>Статус</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderedUsers.map((user) => (
+                      <TeamUserRow
+                        key={user.id}
+                        user={user}
+                        onEdit={() => onEditUser(user)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
           )
         ) : (
           <InlineState
@@ -1780,15 +2894,28 @@ export function TeamUserRow({
   user: CompanyUserDto;
   onEdit: () => void;
 }) {
+  const hasInvite = Boolean(user.inviteExpiresAt);
+  const statusLabel = user.isActive
+    ? 'Активен'
+    : hasInvite
+      ? 'Ожидает активации'
+      : 'Неактивен';
   return (
     <tr>
       <td>{user.name}</td>
       <td>{user.email ?? '—'}</td>
       <td>{formatRoleLabel(user.role)}</td>
       <td>
-        <span className={`badge ${!user.isActive ? 'warn' : ''}`}>
-          {user.isActive ? 'Активен' : 'Неактивен'}
-        </span>
+        <div className="user-status-stack">
+          <span className={`badge ${!user.isActive ? 'warn' : ''}`}>
+            {statusLabel}
+          </span>
+          {hasInvite ? (
+            <span className="badge warn">
+              Приглашение до {new Date(user.inviteExpiresAt as string).toLocaleDateString('ru-RU')}
+            </span>
+          ) : null}
+        </div>
       </td>
       <td>
         <button className="button-ghost" onClick={onEdit}>
@@ -1886,7 +3013,7 @@ export function ReportingView({
           <ExportCard
             title="Движения"
             description={`История движений по складу. Записей: ${movements.length}.`}
-            detail={buildExportFileName('movements-journal', reportFilters.date ? [report.date] : [])}
+            detail={buildExportFileName('movements-journal', [])}
             actionLabel="Экспорт журнала"
             onClick={onExportMovements}
           />
@@ -1958,6 +3085,7 @@ export function InventorySessionRow({
 }) {
   return (
     <tr>
+      <td>{new Date(session.startedAt).toLocaleString('ru-RU')}</td>
       <td>{session.id.slice(0, 8)}</td>
       <td>{formatInventoryStatusLabel(session.status)}</td>
       <td>{session.startedBy.name}</td>
@@ -2091,6 +3219,8 @@ export function AuditView({
   onChangeFilters,
   onClearFilters,
   onExport,
+  defaultSearch = '',
+  defaultSort = 'NEWEST',
 }: {
   logs: AuditLogDto[];
   filters: AuditFiltersState;
@@ -2098,10 +3228,67 @@ export function AuditView({
   onChangeFilters: (next: Partial<AuditFiltersState>) => void;
   onClearFilters: () => void;
   onExport: () => void;
+  defaultSearch?: string;
+  defaultSort?: 'NEWEST' | 'OLDEST';
 }) {
-  const insights = buildAuditInsights(logs);
+  const [auditSearch, setAuditSearch] = useState(defaultSearch);
+  const [auditSort, setAuditSort] = useState<'NEWEST' | 'OLDEST'>(defaultSort);
+  const entityFilterPresets: Array<{ label: string; value: string }> = [
+    { label: 'Все сущности', value: '' },
+    { label: 'Товары', value: 'product' },
+    { label: 'Категории', value: 'category' },
+    { label: 'Движения', value: 'stock_movement' },
+    { label: 'Сессии инвентаризации', value: 'inventory_session' },
+    { label: 'Сотрудники', value: 'user' },
+  ];
+  const actionFilterPresets: Array<{ label: string; value: string }> = [
+    { label: 'Все действия', value: '' },
+    { label: 'Приглашения', value: 'user.invited' },
+    { label: 'Завершение инвентаризации', value: 'inventory.finished' },
+    { label: 'Обновление позиции инвентаризации', value: 'inventory.item.updated' },
+    { label: 'Обновление товара', value: 'product.updated' },
+    { label: 'Обновление сотрудника', value: 'user.updated' },
+  ];
+  const normalizedAuditSearch = auditSearch.trim().toLowerCase();
+  const compactAuditSearch = normalizeAuditToken(normalizedAuditSearch);
+  const filteredLogs = normalizedAuditSearch
+    ? logs.filter((log) => {
+      const payloadSearchText = buildAuditPayloadSummary(log.payload).join(' ');
+      const searchValues = [
+        formatAuditActionLabel(log.action),
+        formatEntityTypeLabel(log.entityType),
+        log.id,
+        log.action,
+        log.entityType,
+        log.createdAt,
+        new Date(log.createdAt).toLocaleString('ru-RU'),
+        log.user.id,
+        log.user.name,
+        formatRoleLabel(log.user.role),
+        log.user.role,
+        log.entityId ?? '',
+        payloadSearchText,
+      ].join(' ').toLowerCase();
+      if (searchValues.includes(normalizedAuditSearch)) {
+        return true;
+      }
+      if (!compactAuditSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchValues).includes(compactAuditSearch);
+    })
+    : logs;
+  const visibleLogs = filteredLogs
+    .slice()
+    .sort((left, right) => (
+      auditSort === 'OLDEST'
+        ? new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+        : new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    ));
+  const insights = buildAuditInsights(visibleLogs);
   const filterBadges = collectAuditFilterBadges(filters, users);
   const hasActiveFilters = filterBadges.length > 0;
+  const hasActiveControls = hasActiveFilters || normalizedAuditSearch.length > 0;
   return (
     <section className="table-card">
       <div className="toolbar">
@@ -2111,7 +3298,20 @@ export function AuditView({
         </div>
         <div className="toolbar-actions">
           <button className="button-ghost" onClick={onExport}>Экспорт CSV</button>
-          <div className="badge">Записей: {logs.length}</div>
+          <button
+            className={`button-ghost quick-filter-button${auditSort === 'NEWEST' ? ' active' : ''}`}
+            onClick={() => setAuditSort('NEWEST')}
+          >
+            Сначала новые
+          </button>
+          <button
+            className={`button-ghost quick-filter-button${auditSort === 'OLDEST' ? ' active' : ''}`}
+            onClick={() => setAuditSort('OLDEST')}
+          >
+            Сначала старые
+          </button>
+          <div className="badge">Записей: {visibleLogs.length}</div>
+          {normalizedAuditSearch ? <div className="badge">Всего в выборке: {logs.length}</div> : null}
         </div>
       </div>
       <div className="filter-panel audit-filter-panel">
@@ -2137,9 +3337,53 @@ export function AuditView({
           onChange={(event) => onChangeFilters({ action: event.target.value })}
           placeholder="Действие"
         />
+        <input
+          className="input"
+          value={auditSearch}
+          onChange={(event) => setAuditSearch(event.target.value)}
+          placeholder="Поиск по действию, сущности, ID, сотруднику, роли, дате или деталям"
+        />
         {hasActiveFilters ? (
           <button className="button-ghost audit-filter-reset" onClick={onClearFilters}>Сбросить фильтры</button>
         ) : null}
+        {normalizedAuditSearch ? (
+          <button className="button-ghost audit-filter-reset" onClick={() => setAuditSearch('')}>Очистить поиск</button>
+        ) : null}
+        {hasActiveControls ? (
+          <button
+            className="button-ghost audit-filter-reset"
+            onClick={() => {
+              onClearFilters();
+              setAuditSearch('');
+            }}
+          >
+            Сбросить всё
+          </button>
+        ) : null}
+      </div>
+      <div className="filter-panel audit-preset-panel">
+        <div className="toolbar-actions toolbar-filters">
+          {entityFilterPresets.map((preset) => (
+            <button
+              key={preset.label}
+              className={`button-ghost quick-filter-button${filters.entityType === preset.value ? ' active' : ''}`}
+              onClick={() => onChangeFilters({ entityType: preset.value })}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-actions toolbar-filters">
+          {actionFilterPresets.map((preset) => (
+            <button
+              key={preset.label}
+              className={`button-ghost quick-filter-button${filters.action === preset.value ? ' active' : ''}`}
+              onClick={() => onChangeFilters({ action: preset.value })}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
       <ActiveFilterChips
         title="Активные фильтры"
@@ -2147,7 +3391,7 @@ export function AuditView({
         emptyLabel="Фильтры не заданы"
         compact
       />
-      {logs.length > 0 ? (
+      {visibleLogs.length > 0 ? (
         <CompactBadgeGroup
           title="Сводка журнала"
           badges={[
@@ -2164,6 +3408,13 @@ export function AuditView({
           title="По текущим фильтрам журнал пуст"
           message="Измени фильтры или выполни действия в панели, чтобы увидеть журнал."
         />
+      ) : visibleLogs.length === 0 ? (
+        <InlineState
+          title="Поиск не дал записей по текущим фильтрам"
+          message="Очисти поиск или измени фильтры журнала."
+          actionLabel="Очистить поиск"
+          onAction={() => setAuditSearch('')}
+        />
       ) : (
         <table>
           <thead>
@@ -2176,7 +3427,7 @@ export function AuditView({
             </tr>
           </thead>
           <tbody>
-            {logs.map((item) => (
+            {visibleLogs.map((item) => (
               <AuditLogRow key={item.id} log={item} />
             ))}
           </tbody>
@@ -2251,16 +3502,10 @@ export function MovementTableRow({
 }: {
   movement: StockMovementDto;
 }) {
-  const movementLabel = movement.movementType === 'INCOME'
-    ? 'Приход'
-    : movement.movementType === 'EXPENSE'
-      ? 'Расход'
-      : movement.movementType === 'ADJUSTMENT'
-        ? 'Корректировка'
-        : 'Сверка';
   return (
     <tr>
-      <td>{movementLabel}</td>
+      <td>{new Date(movement.createdAt).toLocaleString('ru-RU')}</td>
+      <td>{formatMovementTypeLabel(movement.movementType)}</td>
       <td>{movement.product.name}</td>
       <td>{movement.createdBy.name}</td>
       <td>{movement.quantity}</td>
@@ -2281,14 +3526,15 @@ export function AuditLogRow({
       <td>{formatEntityTypeLabel(log.entityType)}</td>
       <td>{log.user.name}</td>
       <td style={{ maxWidth: 420 }}>
-        {!log.payload ? (
+        {!log.payload && !log.entityId ? (
           '—'
         ) : (
           <div className="audit-payload-stack">
+            {log.entityId ? <span className="badge">ID: {log.entityId}</span> : null}
             {payloadSummary.map((item) => (
               <span key={item} className="badge">{item}</span>
             ))}
-            {payloadSummary.length === 0 ? <span className="badge">Есть изменения</span> : null}
+            {payloadSummary.length === 0 && !log.entityId ? <span className="badge">Есть изменения</span> : null}
           </div>
         )}
       </td>
@@ -2431,11 +3677,20 @@ export function MovementModal({
             ? 'Корректировка меняет целевой остаток сразу. Используй ее только для выравнивания факта после проверки.'
             : 'Выбери товар и зафиксируй операцию. Комментарий полезен для разбора спорных движений.'}
         </p>
-        <select className="select" value={productId} onChange={(e) => setProductId(e.target.value)}>
-          {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-        </select>
-        <input className="input" type="number" inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={kind === 'adjustment' ? 'Целевой остаток' : 'Количество'} />
-        <textarea className="textarea" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Комментарий" />
+        <label className="field-block">
+          <span className="field-label">Товар</span>
+          <select className="select" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+          </select>
+        </label>
+        <label className="field-block">
+          <span className="field-label">{kind === 'adjustment' ? 'Целевой остаток' : 'Количество'}</span>
+          <input className="input" type="number" inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={kind === 'adjustment' ? 'Целевой остаток' : 'Количество'} />
+        </label>
+        <label className="field-block">
+          <span className="field-label">Комментарий</span>
+          <textarea className="textarea" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Комментарий" />
+        </label>
         <button className="button" type="submit">
           {kind === 'income' ? 'Провести приход' : kind === 'expense' ? 'Провести расход' : 'Применить корректировку'}
         </button>
@@ -2460,7 +3715,7 @@ export function CompanyModal({ company, onClose, onSubmit }: { company: CompanyD
         </p>
         <label className="field-block"><span className="field-label">Название компании</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" /></label>
         <label className="field-block"><span className="field-label">Город</span><input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Город" /></label>
-        <label className="field-block"><span className="field-label">Телефон</span><label className="field-block"><span className="field-label">Телефон</span><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Телефон" /></label></label>
+        <label className="field-block"><span className="field-label">Телефон</span><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Телефон" /></label>
         <button className="button" type="submit">Сохранить данные компании</button>
       </form>
     </ModalFrame>
@@ -2481,10 +3736,13 @@ export function InviteModal({ inviteToken, onClose, onSubmit }: { inviteToken: s
           После создания приглашения передай сотруднику токен. Он активирует доступ и сам задаст пароль.
         </p>
         <label className="field-block"><span className="field-label">Email</span><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" /></label>
-        <select className="select" value={role} onChange={(e) => setRole(e.target.value as 'MANAGER' | 'STAFF')}>
-          <option value="STAFF">Сотрудник</option>
-          <option value="MANAGER">Менеджер</option>
-        </select>
+        <label className="field-block">
+          <span className="field-label">Роль сотрудника</span>
+          <select className="select" value={role} onChange={(e) => setRole(e.target.value as 'MANAGER' | 'STAFF')}>
+            <option value="STAFF">Сотрудник</option>
+            <option value="MANAGER">Менеджер</option>
+          </select>
+        </label>
         <button className="button" type="submit">Создать приглашение</button>
         {inviteToken ? (
           <InlineState
@@ -2527,12 +3785,18 @@ export function UserModal({ user, onClose, onSubmit }: { user: CompanyUserDto; o
         </div>
         <div className="grid-2">
           <label className="field-block"><span className="field-label">Телефон</span><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Телефон" /></label>
-          <select className="select" value={role} onChange={(e) => setRole(e.target.value as 'MANAGER' | 'STAFF')}>
-            <option value="STAFF">Сотрудник</option>
-            <option value="MANAGER">Менеджер</option>
-          </select>
+          <label className="field-block">
+            <span className="field-label">Роль сотрудника</span>
+            <select className="select" value={role} onChange={(e) => setRole(e.target.value as 'MANAGER' | 'STAFF')}>
+              <option value="STAFF">Сотрудник</option>
+              <option value="MANAGER">Менеджер</option>
+            </select>
+          </label>
         </div>
-        <input className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Новый пароль" />
+        <label className="field-block">
+          <span className="field-label">Новый пароль</span>
+          <input className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Новый пароль" />
+        </label>
         <label className="badge" style={{ width: 'fit-content' }}>
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           Активен

@@ -1,11 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 
-let prismaClient: PrismaClient | undefined;
-
-export function getPrismaClient() {
-  if (!prismaClient) {
-    prismaClient = new PrismaClient();
-  }
-
-  return prismaClient;
+export function getPrismaClient(databaseUrl?: string) {
+  return new PrismaClient(
+    databaseUrl
+      ? {
+          datasources: {
+            db: {
+              url: databaseUrl,
+            },
+          },
+        }
+      : undefined,
+  );
 }

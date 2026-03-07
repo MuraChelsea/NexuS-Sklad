@@ -11,6 +11,7 @@ import {
   readReportEnvelope,
   toApiError,
 } from '../core/api.ts';
+import { fetchAllMovements } from '../features/movements/movements.ts';
 
 test('readItemEnvelope returns item for matching module', () => {
   const envelope = readItemEnvelope({ module: 'products', item: { id: 'p1' } }, 'products');
@@ -69,4 +70,54 @@ test('isSessionExpiredApiError detects auth expiry conditions', () => {
     isSessionExpiredApiError(new ApiError('forbidden', 403, 'FORBIDDEN')),
     false,
   );
+});
+
+test('fetchAllMovements paginates through the full movement history', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (input) => {
+    requests.push(String(input));
+    const page = requests.length === 1
+      ? { module: 'movements', items: Array.from({ length: 100 }, (_, index) => ({ id: `movement-${index + 1}` })) }
+      : { module: 'movements', items: [{ id: 'movement-101' }] };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => page,
+    };
+  };
+
+  try {
+    const movements = await fetchAllMovements('access-token');
+    assert.equal(movements.length, 101);
+    assert.equal(requests.length, 2);
+    assert.match(requests[0], /\/v1\/movements\?limit=100&offset=0$/);
+    assert.match(requests[1], /\/v1\/movements\?limit=100&offset=100$/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchAllMovements forwards date filters for dashboard day slices', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (input) => {
+    requestUrl = String(input);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ module: 'movements', items: [] }),
+    };
+  };
+
+  try {
+    await fetchAllMovements('access-token', {
+      dateFrom: '2026-03-06T00:00:00.000Z',
+      dateTo: '2026-03-06T23:59:59.999Z',
+    });
+    assert.match(requestUrl, /dateFrom=2026-03-06T00%3A00%3A00.000Z/);
+    assert.match(requestUrl, /dateTo=2026-03-06T23%3A59%3A59.999Z/);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

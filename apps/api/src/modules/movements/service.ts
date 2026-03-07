@@ -7,6 +7,9 @@ type ListMovementsInput = {
   productId?: string;
   movementType?: MovementType;
   limit?: number;
+  offset?: number;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 type CreateMovementInput = {
@@ -29,11 +32,14 @@ export class MovementService {
   constructor(private readonly prisma: PrismaClient) {}
 
   async list(input: ListMovementsInput) {
+    const createdAt = this.resolveCreatedAtFilter(input.dateFrom, input.dateTo);
+
     return this.prisma.stockMovement.findMany({
       where: {
         companyId: input.companyId,
         ...(input.productId ? { productId: input.productId } : {}),
         ...(input.movementType ? { movementType: input.movementType } : {}),
+        ...(createdAt ? { createdAt } : {}),
       },
       include: {
         product: {
@@ -54,7 +60,38 @@ export class MovementService {
       },
       orderBy: [{ createdAt: 'desc' }],
       take: input.limit ?? 50,
+      skip: input.offset ?? 0,
     });
+  }
+
+  private resolveCreatedAtFilter(dateFrom?: string, dateTo?: string) {
+    if (!dateFrom && !dateTo) {
+      return undefined;
+    }
+
+    const createdAt: { gte?: Date; lte?: Date } = {};
+
+    if (dateFrom) {
+      const parsedDateFrom = new Date(dateFrom);
+      if (Number.isNaN(parsedDateFrom.getTime())) {
+        throw new AppError(400, 'MOVEMENT_DATE_INVALID', 'Invalid movement date range');
+      }
+      createdAt.gte = parsedDateFrom;
+    }
+
+    if (dateTo) {
+      const parsedDateTo = new Date(dateTo);
+      if (Number.isNaN(parsedDateTo.getTime())) {
+        throw new AppError(400, 'MOVEMENT_DATE_INVALID', 'Invalid movement date range');
+      }
+      createdAt.lte = parsedDateTo;
+    }
+
+    if (createdAt.gte && createdAt.lte && createdAt.gte > createdAt.lte) {
+      throw new AppError(400, 'MOVEMENT_DATE_INVALID', 'Invalid movement date range');
+    }
+
+    return createdAt;
   }
 
   async createIncome(input: CreateMovementInput) {

@@ -883,6 +883,9 @@ export interface paths {
                     productId?: string;
                     movementType?: components["schemas"]["MovementType"];
                     limit?: number;
+                    offset?: number;
+                    dateFrom?: string;
+                    dateTo?: string;
                 };
                 header?: never;
                 path?: never;

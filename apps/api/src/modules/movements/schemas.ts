@@ -11,6 +11,9 @@ export const listMovementsSchema: FastifySchema = {
         enum: ['INCOME', 'EXPENSE', 'ADJUSTMENT', 'INVENTORY_DIFF'],
       },
       limit: { type: 'integer', minimum: 1, maximum: 100 },
+      offset: { type: 'integer', minimum: 0 },
+      dateFrom: { type: 'string', format: 'date-time' },
+      dateTo: { type: 'string', format: 'date-time' },
     },
   },
 };

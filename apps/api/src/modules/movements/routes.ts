@@ -46,6 +46,9 @@ export const movementRoutes: FastifyPluginAsync = async (app) => {
       productId?: string;
       movementType?: MovementType;
       limit?: number;
+      offset?: number;
+      dateFrom?: string;
+      dateTo?: string;
     };
 
     const items = await movementService.list({
@@ -53,6 +56,9 @@ export const movementRoutes: FastifyPluginAsync = async (app) => {
       productId: query.productId,
       movementType: query.movementType,
       limit: query.limit,
+      offset: query.offset,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
     });
 
     const response: OpenApiSchemas['MovementListResponse'] = {

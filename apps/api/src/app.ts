@@ -9,7 +9,7 @@ import { apiRoutes } from './routes/index.js';
 
 export function buildApp(envOverrides?: NodeJS.ProcessEnv) {
   const env = loadEnv(envOverrides);
-  const prisma = getPrismaClient();
+  const prisma = getPrismaClient(env.databaseUrl);
 
   const app = Fastify({
     logger: env.nodeEnv !== 'test',

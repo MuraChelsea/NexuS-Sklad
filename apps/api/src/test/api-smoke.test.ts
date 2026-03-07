@@ -256,7 +256,46 @@ test('inventory, movements, reports and role guards stay consistent', async () =
       token: ownerAccessToken,
     });
     assert.equal(movementList.statusCode, 200);
-    assert.ok(asJsonArray(movementList.body.items).length >= 2);
+    const movementItems = asJsonArray(movementList.body.items);
+    assert.ok(movementItems.length >= 2);
+
+    const archivedIncome = await requestJson(app, {
+      method: 'POST',
+      url: '/v1/movements/income',
+      token: ownerAccessToken,
+      payload: {
+        productId,
+        quantity: 1,
+        comment: 'archived smoke income',
+      },
+    });
+    assert.equal(archivedIncome.statusCode, 200);
+    const archivedIncomeId = (archivedIncome.body.item as JsonObject).id as string;
+
+    const previousDayStart = new Date('2026-03-02T00:00:00.000Z');
+    const previousDayEnd = new Date('2026-03-02T23:59:59.999Z');
+    await app.prisma.stockMovement.update({
+      where: { id: archivedIncomeId },
+      data: { createdAt: new Date('2026-03-02T12:00:00.000Z') },
+    });
+
+    const movementOffset = await requestJson(app, {
+      method: 'GET',
+      url: `/v1/movements?productId=${productId}&movementType=INCOME&limit=1&offset=1`,
+      token: ownerAccessToken,
+    });
+    assert.equal(movementOffset.statusCode, 200);
+    assert.equal(asJsonArray(movementOffset.body.items).length, 1);
+    assert.equal((asJsonArray(movementOffset.body.items)[0] as JsonObject).id, archivedIncomeId);
+
+    const previousDayMovementList = await requestJson(app, {
+      method: 'GET',
+      url: `/v1/movements?productId=${productId}&movementType=INCOME&dateFrom=${encodeURIComponent(previousDayStart.toISOString())}&dateTo=${encodeURIComponent(previousDayEnd.toISOString())}`,
+      token: ownerAccessToken,
+    });
+    assert.equal(previousDayMovementList.statusCode, 200);
+    assert.equal(asJsonArray(previousDayMovementList.body.items).length, 1);
+    assert.equal((asJsonArray(previousDayMovementList.body.items)[0] as JsonObject).id, archivedIncomeId);
 
     const dailyReport = await requestJson(app, {
       method: 'GET',
