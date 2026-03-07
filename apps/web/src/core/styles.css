@@ -201,16 +201,45 @@ button {
 }
 
 .audit-filter-panel {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   align-items: start;
-  max-width: 1040px;
+  max-width: 1160px;
 }
 
 .audit-filter-reset {
   justify-self: start;
 }
 
+.audit-filter-panel .button-ghost {
+  width: fit-content;
+}
+
+.audit-preset-panel {
+  max-width: 1160px;
+  margin-top: -2px;
+}
+
 .stock-filter-panel {
+  max-width: 960px;
+}
+
+.movement-filter-panel {
+  max-width: 960px;
+}
+
+.team-filter-panel {
+  max-width: 960px;
+}
+
+.inventory-filter-panel {
+  max-width: 960px;
+}
+
+.product-filter-panel {
+  max-width: 960px;
+}
+
+.category-filter-panel {
   max-width: 960px;
 }
 
@@ -384,6 +413,16 @@ button {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--line);
+}
+
+.quick-filter-button {
+  padding: 8px 14px;
+}
+
+.quick-filter-button.active {
+  background: rgba(216, 159, 26, 0.18);
+  border-color: rgba(216, 159, 26, 0.34);
+  color: #6a4a02;
 }
 
 .button-danger {
@@ -588,6 +627,11 @@ button {
   gap: 12px;
   align-items: center;
   justify-content: flex-end;
+}
+
+.user-status-stack {
+  display: grid;
+  gap: 6px;
 }
 
 .modal-backdrop {
