@@ -326,7 +326,19 @@ test('inventory, movements, reports and role guards stay consistent', async () =
     });
     assert.equal(audit.statusCode, 200);
     assert.equal(audit.body.module, 'audit');
-    assert.ok(asJsonArray(audit.body.items).length >= 2);
+    const auditItems = asJsonArray(audit.body.items);
+    assert.ok(auditItems.length >= 2);
+
+    const auditOffset = await requestJson(app, {
+      method: 'GET',
+      url: '/v1/audit?entityType=product&limit=1&offset=1',
+      token: ownerAccessToken,
+    });
+    assert.equal(auditOffset.statusCode, 200);
+    assert.equal(auditOffset.body.module, 'audit');
+    const auditOffsetItems = asJsonArray(auditOffset.body.items);
+    assert.equal(auditOffsetItems.length, 1);
+    assert.notEqual((auditOffsetItems[0] as JsonObject).id, (auditItems[0] as JsonObject).id);
   });
 });
 

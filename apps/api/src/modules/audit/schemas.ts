@@ -9,6 +9,7 @@ export const listAuditLogsSchema: FastifySchema = {
       entityType: { type: 'string', minLength: 1, maxLength: 64 },
       action: { type: 'string', minLength: 1, maxLength: 120 },
       limit: { type: 'integer', minimum: 1, maximum: 200 },
+      offset: { type: 'integer', minimum: 0 },
     },
   },
 };

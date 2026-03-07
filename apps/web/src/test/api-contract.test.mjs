@@ -11,6 +11,7 @@ import {
   readReportEnvelope,
   toApiError,
 } from '../core/api.ts';
+import { fetchAllAuditLogs } from '../features/audit/audit.ts';
 import { fetchAllMovements } from '../features/movements/movements.ts';
 
 test('readItemEnvelope returns item for matching module', () => {
@@ -117,6 +118,60 @@ test('fetchAllMovements forwards date filters for dashboard day slices', async (
     });
     assert.match(requestUrl, /dateFrom=2026-03-06T00%3A00%3A00.000Z/);
     assert.match(requestUrl, /dateTo=2026-03-06T23%3A59%3A59.999Z/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchAllAuditLogs paginates through the full audit trail', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (input) => {
+    requests.push(String(input));
+    const page = requests.length === 1
+      ? { module: 'audit', items: Array.from({ length: 100 }, (_, index) => ({ id: `audit-${index + 1}` })) }
+      : { module: 'audit', items: [{ id: 'audit-101' }] };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => page,
+    };
+  };
+
+  try {
+    const logs = await fetchAllAuditLogs('access-token');
+    assert.equal(logs.length, 101);
+    assert.equal(requests.length, 2);
+    assert.match(requests[0], /\/v1\/audit\?limit=100&offset=0$/);
+    assert.match(requests[1], /\/v1\/audit\?limit=100&offset=100$/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchAllAuditLogs forwards active audit filters across pages', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (input) => {
+    requestUrl = String(input);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ module: 'audit', items: [] }),
+    };
+  };
+
+  try {
+    await fetchAllAuditLogs('access-token', {
+      userId: '11111111-1111-1111-1111-111111111111',
+      entityType: 'product',
+      action: 'product.updated',
+    });
+    assert.match(requestUrl, /userId=11111111-1111-1111-1111-111111111111/);
+    assert.match(requestUrl, /entityType=product/);
+    assert.match(requestUrl, /action=product.updated/);
+    assert.match(requestUrl, /limit=100/);
+    assert.match(requestUrl, /offset=0/);
   } finally {
     global.fetch = originalFetch;
   }

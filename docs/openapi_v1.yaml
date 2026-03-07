@@ -187,6 +187,11 @@ paths:
             type: integer
             minimum: 1
             maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Audit logs

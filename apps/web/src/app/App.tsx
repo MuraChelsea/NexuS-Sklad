@@ -6,7 +6,7 @@ import type {
 import { ApiError, isSessionExpiredApiError } from '../core/api';
 import { appConfig } from '../core/config';
 import { executeConfirmedSessionAction, executeSessionAction } from '../core/session-actions';
-import { fetchAuditLogs } from '../features/audit/audit';
+import { fetchAllAuditLogs } from '../features/audit/audit';
 import { login, me, refresh } from '../features/auth/auth';
 import { fetchDailyReport, fetchStockReport } from '../features/dashboard/dashboard';
 import {
@@ -686,7 +686,7 @@ export function App() {
       fetchAllMovements(activeSession.accessToken, movementDayRange),
       activeSession.user.role === 'OWNER' ? fetchUsers(activeSession.accessToken) : Promise.resolve([]),
       activeSession.user.role === 'OWNER'
-        ? fetchAuditLogs(activeSession.accessToken, {
+        ? fetchAllAuditLogs(activeSession.accessToken, {
             userId: auditFilters.userId || undefined,
             entityType: auditFilters.entityType || undefined,
             action: auditFilters.action || undefined,

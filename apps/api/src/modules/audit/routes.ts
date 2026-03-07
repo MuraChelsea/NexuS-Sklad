@@ -31,6 +31,7 @@ export const auditRoutes: FastifyPluginAsync = async (app) => {
       entityType?: string;
       action?: string;
       limit?: number;
+      offset?: number;
     };
 
     const items = await auditService.list({
@@ -39,6 +40,7 @@ export const auditRoutes: FastifyPluginAsync = async (app) => {
       entityType: query.entityType,
       action: query.action,
       limit: query.limit,
+      offset: query.offset,
     });
 
     const response: OpenApiSchemas['AuditListResponse'] = {

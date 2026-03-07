@@ -345,6 +345,7 @@ export interface paths {
                     entityType?: string;
                     action?: string;
                     limit?: number;
+                    offset?: number;
                 };
                 header?: never;
                 path?: never;

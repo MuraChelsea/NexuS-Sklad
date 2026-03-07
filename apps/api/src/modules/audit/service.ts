@@ -6,6 +6,7 @@ type ListAuditLogsInput = {
   entityType?: string;
   action?: string;
   limit?: number;
+  offset?: number;
 };
 
 export class AuditService {
@@ -24,6 +25,7 @@ export class AuditService {
       },
       orderBy: [{ createdAt: 'desc' }],
       take: input.limit ?? 50,
+      skip: input.offset ?? 0,
       include: {
         user: {
           select: {
