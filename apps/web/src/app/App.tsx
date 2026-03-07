@@ -1600,9 +1600,9 @@ export function DashboardView({
   return (
     <>
       <section className="metrics-grid">
-        <MetricCard title="Низкий остаток" value={String(lowStockCount)} tone="var(--accent-2)" />
-        <MetricCard title="Движения" value={String(movementCount)} tone="var(--sky)" />
-        <MetricCard title="Товары" value={String(productCount)} tone="var(--success)" />
+        <MetricCard title="Текущий низкий остаток" value={String(lowStockCount)} tone="var(--accent-2)" />
+        <MetricCard title="Движения за день" value={String(movementCount)} tone="var(--sky)" />
+        <MetricCard title="Товаров в каталоге" value={String(productCount)} tone="var(--success)" />
       </section>
       <section className="table-card">
         <div className="toolbar">

@@ -727,6 +727,9 @@ test('DashboardView renders session filter controls and summary badges', () => {
     }),
   );
 
+  assert.match(html, /Текущий низкий остаток/);
+  assert.match(html, /Движения за день/);
+  assert.match(html, /Товаров в каталоге/);
   assert.match(html, /Сессий: 2/);
   assert.match(html, /Черновики: 1/);
   assert.match(html, /Завершено: 1/);

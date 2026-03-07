@@ -1291,3 +1291,6 @@
 432. Проведен `inventory day-scoped copy alignment` pass: `InventoryView` больше не маркирует date-scoped экран как "сегодня" и переведен на нейтральные формулировки `Сессии за день`, `Дата: ...`, `За выбранный день ...`, чтобы подписи не врали при просмотре архива за прошлые даты.
 433. Smoke-кейс `InventoryView renders empty session CTA and stock filters context` обновлен проверками `Сессии за день`, `Дата: 2026-03-03` и `За выбранный день сессий инвентаризации нет`, фиксирующими копирайт вокруг date picker.
 434. После inventory day-scoped copy alignment pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
+435. Проведен `dashboard mixed-scope metric copy alignment` pass: в `DashboardView` метрики переименованы в `Текущий низкий остаток`, `Движения за день`, `Товаров в каталоге`, чтобы top-cards не выглядели как единый day-scoped блок при фактически смешанных текущих и дневных данных.
+436. Smoke-кейс `DashboardView renders session filter controls and summary badges` расширен проверками новых metric labels, фиксирующими различие между текущим состоянием каталога и операциями выбранного дня.
+437. После dashboard mixed-scope metric copy alignment pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
