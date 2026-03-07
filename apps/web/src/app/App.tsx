@@ -3061,7 +3061,7 @@ export function ReportingView({
     `Корр.: ${report.movementSummary.ADJUSTMENT?.count ?? 0}`,
     `Расхождения: ${report.movementSummary.INVENTORY_DIFF?.count ?? 0}`,
     `Сессии: ${report.inventory.sessionsCount}`,
-    `Низкий остаток: ${report.stock.lowStockCount}`,
+    `Текущий низкий остаток: ${report.stock.lowStockCount}`,
   ];
   return (
     <>
