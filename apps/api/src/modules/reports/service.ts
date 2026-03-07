@@ -126,7 +126,7 @@ export class ReportService {
         },
       },
       orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
-      take: input.limit ?? 100,
+      ...(input.limit != null ? { take: input.limit } : {}),
     });
 
     const items = products

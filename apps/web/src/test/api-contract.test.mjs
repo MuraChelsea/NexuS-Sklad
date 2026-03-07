@@ -12,6 +12,7 @@ import {
   toApiError,
 } from '../core/api.ts';
 import { fetchAllAuditLogs } from '../features/audit/audit.ts';
+import { fetchStockReport } from '../features/dashboard/dashboard.ts';
 import { fetchAllMovements } from '../features/movements/movements.ts';
 
 test('readItemEnvelope returns item for matching module', () => {
@@ -172,6 +173,52 @@ test('fetchAllAuditLogs forwards active audit filters across pages', async () =>
     assert.match(requestUrl, /action=product.updated/);
     assert.match(requestUrl, /limit=100/);
     assert.match(requestUrl, /offset=0/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchStockReport does not force a default limit for full stock exports', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (input) => {
+    requestUrl = String(input);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ module: 'reports', report: 'stock', item: { summary: { totalItems: 0, lowStockItems: 0 }, items: [] } }),
+    };
+  };
+
+  try {
+    await fetchStockReport('access-token', {
+      lowOnly: true,
+      search: 'cola',
+    });
+    assert.match(requestUrl, /\/v1\/reports\/stock\?/);
+    assert.match(requestUrl, /lowOnly=true/);
+    assert.match(requestUrl, /search=cola/);
+    assert.doesNotMatch(requestUrl, /limit=/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchStockReport forwards explicit limit when requested', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (input) => {
+    requestUrl = String(input);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ module: 'reports', report: 'stock', item: { summary: { totalItems: 0, lowStockItems: 0 }, items: [] } }),
+    };
+  };
+
+  try {
+    await fetchStockReport('access-token', { limit: 25 });
+    assert.match(requestUrl, /limit=25/);
   } finally {
     global.fetch = originalFetch;
   }

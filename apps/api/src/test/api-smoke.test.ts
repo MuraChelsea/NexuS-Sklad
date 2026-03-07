@@ -114,7 +114,7 @@ test('auth lifecycle smoke covers register, invite, accept, refresh and logout',
 });
 
 test('inventory, movements, reports and role guards stay consistent', async () => {
-  await withFreshCompany(async ({ app, ownerAccessToken, suffix }) => {
+  await withFreshCompany(async ({ app, companyId, ownerAccessToken, suffix }) => {
     const createCategory = await requestJson(app, {
       method: 'POST',
       url: '/v1/categories',
@@ -318,6 +318,45 @@ test('inventory, movements, reports and role guards stay consistent', async () =
     const stockItem = asJsonObject(stockReport.body.item);
     const stockSummary = asJsonObject(stockItem.summary);
     assert.equal(stockSummary.lowStockItems, 0);
+
+    await app.prisma.product.createMany({
+      data: Array.from({ length: 101 }, (_, index) => ({
+        companyId,
+        name: index === 100 ? 'Stock report low tail item' : `Stock report filler ${String(index + 1).padStart(3, '0')}`,
+        unit: 'шт',
+        minStock: index === 100 ? 5 : 1,
+        currentStock: index === 100 ? 1 : 10,
+      })),
+    });
+
+    const fullStockReport = await requestJson(app, {
+      method: 'GET',
+      url: '/v1/reports/stock',
+      token: ownerAccessToken,
+    });
+    assert.equal(fullStockReport.statusCode, 200);
+    assert.equal(fullStockReport.body.report, 'stock');
+    const fullStockItem = asJsonObject(fullStockReport.body.item);
+    const fullStockSummary = asJsonObject(fullStockItem.summary);
+    const fullStockItems = asJsonArray(fullStockItem.items);
+    assert.equal(fullStockSummary.totalItems, 102);
+    assert.equal(fullStockSummary.lowStockItems, 1);
+    assert.equal(fullStockItems.length, 102);
+
+    const lowOnlyStockReport = await requestJson(app, {
+      method: 'GET',
+      url: '/v1/reports/stock?lowOnly=true',
+      token: ownerAccessToken,
+    });
+    assert.equal(lowOnlyStockReport.statusCode, 200);
+    assert.equal(lowOnlyStockReport.body.report, 'stock');
+    const lowOnlyStockItem = asJsonObject(lowOnlyStockReport.body.item);
+    const lowOnlyStockSummary = asJsonObject(lowOnlyStockItem.summary);
+    const lowOnlyStockItems = asJsonArray(lowOnlyStockItem.items);
+    assert.equal(lowOnlyStockSummary.totalItems, 1);
+    assert.equal(lowOnlyStockSummary.lowStockItems, 1);
+    assert.equal(lowOnlyStockItems.length, 1);
+    assert.equal((asJsonObject(lowOnlyStockItems[0]).name), 'Stock report low tail item');
 
     const audit = await requestJson(app, {
       method: 'GET',

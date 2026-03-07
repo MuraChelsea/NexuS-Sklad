@@ -30,6 +30,7 @@ export async function fetchStockReport(accessToken: string, filters: StockReport
   if (filters.categoryId) params.set('categoryId', filters.categoryId);
   if (filters.search) params.set('search', filters.search);
   if (filters.lowOnly) params.set('lowOnly', 'true');
-  params.set('limit', String(filters.limit ?? 100));
-  return api.getReport<StockReport>(`/v1/reports/stock?${params.toString()}`, 'stock');
+  if (filters.limit != null) params.set('limit', String(filters.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return api.getReport<StockReport>(`/v1/reports/stock${suffix}`, 'stock');
 }
