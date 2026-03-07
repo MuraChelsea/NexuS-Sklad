@@ -2448,6 +2448,7 @@ test('ReportingView renders active export context', () => {
   );
 
   assert.match(html, /Контекст отчета/);
+  assert.match(html, /Дата сводки: 2026-03-03/);
   assert.match(html, /Поиск: cola/);
   assert.match(html, /Категория: Напитки/);
   assert.match(html, /Только низкий остаток/);
@@ -2456,7 +2457,8 @@ test('ReportingView renders active export context', () => {
   assert.match(html, /Сессии: 0/);
   assert.match(html, /Текущий низкий остаток: 0/);
   assert.match(html, /Пользователь: Мурад И\./);
-  assert.match(html, /nexussklad-stock-report-2026-03-03-cola/i);
+  assert.match(html, /nexussklad-stock-report-cola-напитки-low-only\.csv/i);
+  assert.doesNotMatch(html, /nexussklad-stock-report-2026-03-03/i);
   assert.match(html, /nexussklad-audit-trail-[^-<]*мурад-и/i);
 });
 

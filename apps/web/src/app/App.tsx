@@ -1208,7 +1208,7 @@ export function App() {
                   }}
                   onExportStock={() => {
                     downloadCsv(
-                      buildExportFileName('stock-report', collectReportFilterTokens(reportFilters, data.categories)),
+                      buildExportFileName('stock-report', collectStockReportFilterTokens(reportFilters, data.categories)),
                       [
                         ['name', 'sku', 'category', 'unit', 'currentStock', 'minStock', 'isLowStock'],
                         ...data.stockReport.items.map((item) => [
@@ -2398,7 +2398,7 @@ export function InventoryView({
   const [sessionSort, setSessionSort] = useState<InventorySessionSort>(defaultSessionSort);
   const [stockSort, setStockSort] = useState<StockReportSort>(defaultStockSort);
   const [stockStatusFilter, setStockStatusFilter] = useState<StockStatusFilter>(defaultStockStatusFilter);
-  const reportFilterBadges = collectReportFilterBadges(filters, categories);
+  const stockReportFilterBadges = collectStockReportFilterBadges(filters, categories);
   const draftSessions = report.inventory.sessions.filter((session) => session.status !== 'COMPLETED').length;
   const completedSessions = report.inventory.sessions.filter((session) => session.status === 'COMPLETED').length;
   const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
@@ -2598,7 +2598,7 @@ export function InventoryView({
         <div className="reporting-context-grid stock-report-context-grid">
           <ContextBadgeRow
             title="Контекст отчета"
-            badges={reportFilterBadges.filter((badge) => badge !== `Дата: ${filters.date}`)}
+            badges={stockReportFilterBadges}
             emptyLabel="Без дополнительных фильтров"
           />
           <ContextBadgeRow
@@ -3053,7 +3053,7 @@ export function ReportingView({
   onExportStock: () => void;
   onExportAudit: () => void;
 }) {
-  const reportFilterBadges = collectReportFilterBadges(reportFilters, categories);
+  const stockReportFilterBadges = collectStockReportFilterBadges(reportFilters, categories);
   const auditFilterBadges = collectAuditFilterBadges(auditFilters, users);
   const dailyInsightBadges = [
     `Приход: ${report.movementSummary.INCOME?.count ?? 0}`,
@@ -3083,7 +3083,7 @@ export function ReportingView({
           <div className="reporting-context-grid">
             <ContextBadgeRow
               title="Контекст отчета"
-              badges={reportFilterBadges}
+              badges={stockReportFilterBadges}
               emptyLabel="Без дополнительных фильтров"
             />
             {canSeeAudit ? (
@@ -3118,7 +3118,7 @@ export function ReportingView({
           <ExportCard
             title="Отчет по остаткам"
             description={`Срез по остаткам и зонам риска. Позиции: ${stockReport.summary.totalItems}.`}
-            detail={buildExportFileName('stock-report', collectReportFilterTokens(reportFilters, categories))}
+            detail={buildExportFileName('stock-report', collectStockReportFilterTokens(reportFilters, categories))}
             actionLabel="Экспорт отчета"
             onClick={onExportStock}
           />
@@ -3954,10 +3954,28 @@ function collectReportFilterTokens(filters: ReportFiltersState, categories: Cate
   ].filter(Boolean);
 }
 
+function collectStockReportFilterTokens(filters: ReportFiltersState, categories: CategoryDto[]) {
+  const categoryName = categories.find((item) => item.id === filters.stockCategoryId)?.name;
+  return [
+    filters.stockSearch || '',
+    categoryName || '',
+    filters.lowOnly ? 'low-only' : '',
+  ].filter(Boolean);
+}
+
 function collectReportFilterBadges(filters: ReportFiltersState, categories: CategoryDto[]) {
   const categoryName = categories.find((item) => item.id === filters.stockCategoryId)?.name;
   return [
     `Дата: ${filters.date}`,
+    filters.stockSearch ? `Поиск: ${filters.stockSearch}` : '',
+    categoryName ? `Категория: ${categoryName}` : '',
+    filters.lowOnly ? 'Только низкий остаток' : '',
+  ].filter(Boolean);
+}
+
+function collectStockReportFilterBadges(filters: ReportFiltersState, categories: CategoryDto[]) {
+  const categoryName = categories.find((item) => item.id === filters.stockCategoryId)?.name;
+  return [
     filters.stockSearch ? `Поиск: ${filters.stockSearch}` : '',
     categoryName ? `Категория: ${categoryName}` : '',
     filters.lowOnly ? 'Только низкий остаток' : '',
