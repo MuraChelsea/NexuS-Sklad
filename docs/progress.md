@@ -1279,3 +1279,6 @@
 420. Проведен `web export parity` pass: экспорт из `ProductsView`, `MovementsView`, `InventoryView` и `AuditView` переведен на текущий видимый срез, чтобы CSV учитывал локальные quick-filters, поиск и sort-mode, а не исходный необработанный массив из `App`.
 421. В `apps/web/src/app/App.tsx` вынесены selector-helper'ы `selectVisibleProducts`, `selectVisibleMovements`, `selectVisibleInventorySessions`, `selectVisibleStockReportItems`, `selectVisibleAuditLogs`, что убрало дублирование filter/search/sort логики между таблицей и export callback.
 422. После web export parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `144 passed`, `npm run build` — ok.
+423. Проведен `web team separator-variant search hardening` pass: в `TeamView` добавлен compact fallback для query-строки, чтобы поиск сотрудников стабильно находил `user.id` и email при разных разделителях, а не только при уже нормализованных токенах.
+424. Добавлены smoke-кейсы `TeamView supports search by separator-variant user id token` и `TeamView supports search by separator-variant email token`, закрепляющие запросы вида `7777 7777 ...` и `ali nexussklad local`.
+425. После team separator-variant search hardening `apps/web` quality gate снова зеленый: `npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.

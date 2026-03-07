@@ -1940,6 +1940,23 @@ test('TeamView supports search by compact user id', () => {
   assert.match(html, /Мурад И\./);
 });
 
+test('TeamView supports search by separator-variant user id token', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TeamView, {
+      company: demoCompany(),
+      users: [demoUser()],
+      isOwner: true,
+      defaultSearch: '7777 7777 7777 7777 7777 7777 7777 7777',
+      onEditCompany: () => undefined,
+      onInvite: () => undefined,
+      onEditUser: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(html, /Поиск не дал сотрудников по текущему фильтру\./);
+  assert.match(html, /Мурад И\./);
+});
+
 test('TeamView supports search by compact email token', () => {
   const html = renderToStaticMarkup(
     React.createElement(TeamView, {
@@ -1947,6 +1964,23 @@ test('TeamView supports search by compact email token', () => {
       users: [demoUser()],
       isOwner: true,
       defaultSearch: 'alinexusskladlocal',
+      onEditCompany: () => undefined,
+      onInvite: () => undefined,
+      onEditUser: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(html, /Поиск не дал сотрудников по текущему фильтру\./);
+  assert.match(html, /Мурад И\./);
+});
+
+test('TeamView supports search by separator-variant email token', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TeamView, {
+      company: demoCompany(),
+      users: [demoUser()],
+      isOwner: true,
+      defaultSearch: 'ali nexussklad local',
       onEditCompany: () => undefined,
       onInvite: () => undefined,
       onEditUser: () => undefined,

@@ -2737,6 +2737,7 @@ export function TeamView({
     { value: 'INVITED', label: 'Приглашения' },
   ];
   const normalizedSearch = teamSearch.trim().toLowerCase();
+  const compactTeamSearch = normalizeAuditToken(normalizedSearch);
   const filteredUsers = users.filter((user) => {
     switch (teamFilter) {
       case 'ACTIVE':
@@ -2753,7 +2754,16 @@ export function TeamView({
     }
   });
   const visibleUsers = normalizedSearch
-    ? filteredUsers.filter((user) => buildTeamUserSearchText(user).includes(normalizedSearch))
+    ? filteredUsers.filter((user) => {
+      const searchText = buildTeamUserSearchText(user);
+      if (searchText.includes(normalizedSearch)) {
+        return true;
+      }
+      if (!compactTeamSearch) {
+        return false;
+      }
+      return normalizeAuditToken(searchText).includes(compactTeamSearch);
+    })
     : filteredUsers;
   const orderedUsers = sortTeamUsers(visibleUsers, teamSort);
 
