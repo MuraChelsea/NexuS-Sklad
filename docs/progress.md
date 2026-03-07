@@ -1282,3 +1282,6 @@
 423. Проведен `web team separator-variant search hardening` pass: в `TeamView` добавлен compact fallback для query-строки, чтобы поиск сотрудников стабильно находил `user.id` и email при разных разделителях, а не только при уже нормализованных токенах.
 424. Добавлены smoke-кейсы `TeamView supports search by separator-variant user id token` и `TeamView supports search by separator-variant email token`, закрепляющие запросы вида `7777 7777 ...` и `ali nexussklad local`.
 425. После team separator-variant search hardening `apps/web` quality gate снова зеленый: `npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
+426. Проведен `reporting export preview parity` pass: `ReportingView` теперь строит preview filename для audit export с теми же `users`, что и реальный download callback, чтобы карточка выгрузки не показывала одно имя файла, а скачивание не выдавало другое при active `auditFilters.userId`.
+427. Добавлен smoke-кейс на audit export card в `ReportingView renders active export context`, фиксирующий preview имени файла с user-based token вместо анонимного `userId`.
+428. После reporting export preview parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.

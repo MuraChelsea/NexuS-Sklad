@@ -2406,6 +2406,7 @@ test('ReportingView renders export empty state', () => {
       report: demoDailyReport(),
       stockReport: demoStockReport([]),
       categories: [demoCategory()],
+      users: [],
       movements: [],
       products: [],
       auditLogs: [],
@@ -2429,6 +2430,7 @@ test('ReportingView renders active export context', () => {
       report: demoDailyReport(),
       stockReport: demoStockReport([demoStockItem()]),
       categories: [demoCategory()],
+      users: [demoUser()],
       movements: [demoMovement()],
       products: [demoProduct()],
       auditLogs: [demoAuditLog()],
@@ -2450,6 +2452,7 @@ test('ReportingView renders active export context', () => {
   assert.match(html, /Приход: 0/);
   assert.match(html, /Сессии: 0/);
   assert.match(html, /nexussklad-stock-report-2026-03-03-cola/i);
+  assert.match(html, /nexussklad-audit-trail-[^-<]*мурад-и/i);
 });
 
 test('InventoryView renders empty session CTA and stock filters context', () => {

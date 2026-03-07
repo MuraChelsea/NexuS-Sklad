@@ -1165,6 +1165,7 @@ export function App() {
                   report={data.report}
                   stockReport={data.stockReport}
                   categories={data.categories}
+                  users={data.users}
                   movements={data.movements}
                   products={data.products}
                   auditLogs={data.auditLogs}
@@ -3025,6 +3026,7 @@ export function ReportingView({
   report,
   stockReport,
   categories,
+  users,
   movements,
   products,
   auditLogs,
@@ -3039,6 +3041,7 @@ export function ReportingView({
   report: DailyReportDto;
   stockReport: StockReportDto;
   categories: CategoryDto[];
+  users: CompanyUserDto[];
   movements: StockMovementDto[];
   products: ProductDto[];
   auditLogs: AuditLogDto[];
@@ -3123,7 +3126,7 @@ export function ReportingView({
             <ExportCard
               title="Журнал изменений"
               description={`Журнал важных действий владельца и команды. Записей: ${auditLogs.length}.`}
-              detail={buildExportFileName('audit-trail', collectAuditFilterTokens(auditFilters, []))}
+              detail={buildExportFileName('audit-trail', collectAuditFilterTokens(auditFilters, users))}
               actionLabel="Экспорт журнала"
               onClick={onExportAudit}
             />
