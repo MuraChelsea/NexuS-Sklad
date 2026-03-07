@@ -2451,6 +2451,7 @@ test('ReportingView renders active export context', () => {
   assert.match(html, /Сводка дня/);
   assert.match(html, /Приход: 0/);
   assert.match(html, /Сессии: 0/);
+  assert.match(html, /Пользователь: Мурад И\./);
   assert.match(html, /nexussklad-stock-report-2026-03-03-cola/i);
   assert.match(html, /nexussklad-audit-trail-[^-<]*мурад-и/i);
 });

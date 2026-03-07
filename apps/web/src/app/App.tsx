@@ -3054,7 +3054,7 @@ export function ReportingView({
   onExportAudit: () => void;
 }) {
   const reportFilterBadges = collectReportFilterBadges(reportFilters, categories);
-  const auditFilterBadges = collectAuditFilterBadges(auditFilters);
+  const auditFilterBadges = collectAuditFilterBadges(auditFilters, users);
   const dailyInsightBadges = [
     `Приход: ${report.movementSummary.INCOME?.count ?? 0}`,
     `Расход: ${report.movementSummary.EXPENSE?.count ?? 0}`,

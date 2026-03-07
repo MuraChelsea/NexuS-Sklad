@@ -1285,3 +1285,6 @@
 426. Проведен `reporting export preview parity` pass: `ReportingView` теперь строит preview filename для audit export с теми же `users`, что и реальный download callback, чтобы карточка выгрузки не показывала одно имя файла, а скачивание не выдавало другое при active `auditFilters.userId`.
 427. Добавлен smoke-кейс на audit export card в `ReportingView renders active export context`, фиксирующий preview имени файла с user-based token вместо анонимного `userId`.
 428. После reporting export preview parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
+429. Проведен `reporting audit context badge parity` pass: `ReportingView` теперь прокидывает `users` и в `collectAuditFilterBadges`, чтобы блок "Контекст журнала" показывал фактическое имя выбранного сотрудника, а не generic placeholder `Пользователь: выбран вручную`.
+430. Smoke-кейс `ReportingView renders active export context` расширен проверкой badge `Пользователь: Мурад И.` рядом с audit export preview, чтобы контекст карточки и download metadata больше не расходились.
+431. После reporting audit context badge parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
