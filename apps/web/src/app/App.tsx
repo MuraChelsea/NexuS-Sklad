@@ -2419,7 +2419,7 @@ export function InventoryView({
   return (
     <>
       <section className="metrics-grid">
-        <MetricCard title="Сессии сегодня" value={String(report.inventory.sessionsCount)} tone="var(--accent)" />
+        <MetricCard title="Сессии за день" value={String(report.inventory.sessionsCount)} tone="var(--accent)" />
         <MetricCard title="Низкий остаток" value={String(stockReport.summary.lowStockItems)} tone="var(--accent-2)" />
         <MetricCard title="Позиции в отчете" value={String(stockReport.summary.totalItems)} tone="var(--sky)" />
       </section>
@@ -2432,7 +2432,7 @@ export function InventoryView({
           </div>
           <div className="toolbar-actions">
             {canManage ? <button className="button" onClick={onStart}>Запустить сессию</button> : null}
-            <div className="badge">Сегодня: {report.date}</div>
+            <div className="badge">Дата: {report.date}</div>
           </div>
         </div>
         <div className="toolbar audit-insights">
@@ -2441,7 +2441,7 @@ export function InventoryView({
         </div>
         {report.inventory.sessions.length === 0 ? (
           <InlineState
-            title="За сегодня сессий инвентаризации нет"
+            title="За выбранный день сессий инвентаризации нет"
             message="Запусти первую сессию, чтобы зафиксировать фактические остатки и сверить расхождения."
             actionLabel={canManage ? 'Запустить сессию' : undefined}
             onAction={canManage ? onStart : undefined}

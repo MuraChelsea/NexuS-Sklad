@@ -2471,7 +2471,9 @@ test('InventoryView renders empty session CTA and stock filters context', () => 
     }),
   );
 
-  assert.match(html, /За сегодня сессий инвентаризации нет/);
+  assert.match(html, /Сессии за день/);
+  assert.match(html, /Дата: 2026-03-03/);
+  assert.match(html, /За выбранный день сессий инвентаризации нет/);
   assert.match(html, /Запустить сессию/);
   assert.match(html, /Контекст отчета/);
   assert.match(html, /Поиск: cola/);
