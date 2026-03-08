@@ -3055,6 +3055,10 @@ export function ReportingView({
 }) {
   const stockReportFilterBadges = collectStockReportFilterBadges(reportFilters, categories);
   const auditFilterBadges = collectAuditFilterBadges(auditFilters, users);
+  const hasExportableData = products.length > 0
+    || movements.length > 0
+    || stockReport.items.length > 0
+    || (canSeeAudit && auditLogs.length > 0);
   const dailyInsightBadges = [
     `Приход: ${report.movementSummary.INCOME?.count ?? 0}`,
     `Расход: ${report.movementSummary.EXPENSE?.count ?? 0}`,
@@ -3132,7 +3136,7 @@ export function ReportingView({
             />
           ) : null}
         </div>
-        {products.length === 0 && movements.length === 0 && stockReport.items.length === 0 ? (
+        {!hasExportableData ? (
           <div style={{ marginTop: 16 }}>
             <InlineState
               title="Экспортировать пока нечего"

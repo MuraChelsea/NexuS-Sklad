@@ -2427,6 +2427,32 @@ test('ReportingView renders export empty state', () => {
   assert.match(html, /nexussklad-products-catalog\.csv/);
 });
 
+test('ReportingView does not show empty state when only audit export has data', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ReportingView, {
+      report: demoDailyReport(),
+      stockReport: demoStockReport([]),
+      categories: [demoCategory()],
+      users: [demoUser()],
+      movements: [],
+      products: [],
+      auditLogs: [demoAuditLog()],
+      canSeeAudit: true,
+      reportFilters: { date: '2026-03-03', stockSearch: '', stockCategoryId: '', lowOnly: false },
+      auditFilters: { userId: demoUser().id, entityType: '', action: '' },
+      onExportProducts: () => undefined,
+      onExportMovements: () => undefined,
+      onExportStock: () => undefined,
+      onExportAudit: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(html, /Экспортировать пока нечего/);
+  assert.match(html, /Журнал изменений/);
+  assert.match(html, /Записей: 1\./);
+  assert.match(html, /nexussklad-audit-trail-[^-<]*мурад-и/i);
+});
+
 test('ReportingView renders active export context', () => {
   const html = renderToStaticMarkup(
     React.createElement(ReportingView, {

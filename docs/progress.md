@@ -1303,3 +1303,6 @@
 444. Проведен `stock report metric scope copy alignment` pass: metric card `Низкий остаток` в `ReportingView` и `InventoryView` переименован в `Низкий остаток в отчете`, потому что он показывает не глобальный low-stock count компании, а `stockReport.summary.lowStockItems` для текущего фильтрованного stock-report среза.
 445. Smoke-кейсы `ReportingView renders active export context` и `InventoryView renders empty session CTA and stock filters context` расширены проверкой label `Низкий остаток в отчете`, чтобы карточки summary не маскировали report-scoped счетчик под абсолютную метрику каталога.
 446. После stock report metric scope copy alignment pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `146 passed`, `npm run build` — ok.
+447. Проведен `reporting audit-only empty-state integrity` pass: `ReportingView` больше не показывает `Экспортировать пока нечего`, если у owner есть доступный `auditLogs` export при пустых товарах, движениях и stock report.
+448. Добавлен smoke-кейс `ReportingView does not show empty state when only audit export has data`, фиксирующий owner-only сценарий с единственным доступным export source из журнала изменений.
+449. После reporting audit-only empty-state integrity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `147 passed`, `npm run build` — ok.
