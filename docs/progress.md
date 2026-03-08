@@ -1309,3 +1309,5 @@
 450. Проведен `audit empty-state semantics` pass: `AuditView` теперь различает полностью пустой журнал и пустой результат из-за active server-side filters, чтобы экран без фильтров не маркировался как filtered state.
 451. Добавлены smoke-кейсы `AuditView renders empty filtered state` и `AuditView renders filtered empty state when server-side filters remove all logs`, фиксирующие обе ветки no-data semantics вместе с badge-контекстом активных фильтров.
 452. После audit empty-state semantics pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `148 passed`, `npm run build` — ok.
+453. Проведен `inventory stock-summary copy parity` pass: в `InventoryView` badge `Сводка отчета` переведен на `Низкий остаток в отчете`, чтобы summary block не расходился с metric card и не маскировал report-scoped low-stock count под абсолютный показатель каталога.
+454. После inventory stock-summary copy parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `148 passed`, `npm run build` — ok.

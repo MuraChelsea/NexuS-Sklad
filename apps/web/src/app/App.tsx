@@ -2604,7 +2604,7 @@ export function InventoryView({
           <ContextBadgeRow
             title="Сводка отчета"
             badges={[
-              `Низкий остаток: ${stockReport.summary.lowStockItems}`,
+              `Низкий остаток в отчете: ${stockReport.summary.lowStockItems}`,
               `Позиции в отчете: ${stockReport.summary.totalItems}`,
             ]}
             emptyLabel="Сводка отчета пока не собрана"
