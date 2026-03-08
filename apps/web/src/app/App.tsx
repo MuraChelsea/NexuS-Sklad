@@ -2725,11 +2725,12 @@ export function TeamView({
   const [teamFilter, setTeamFilter] = useState<TeamFilter>(defaultFilter);
   const [teamSearch, setTeamSearch] = useState(defaultSearch);
   const [teamSort, setTeamSort] = useState<TeamSort>(defaultSort);
-  const activeUsers = users.filter((user) => user.isActive).length;
-  const inactiveUsers = users.length - activeUsers;
-  const managers = users.filter((user) => user.role === 'MANAGER').length;
-  const staff = users.filter((user) => user.role === 'STAFF').length;
-  const hasInvites = users.some((user) => Boolean(user.inviteExpiresAt));
+  const managedUsers = users.filter((user) => user.role !== 'OWNER');
+  const activeUsers = managedUsers.filter((user) => user.isActive).length;
+  const inactiveUsers = managedUsers.length - activeUsers;
+  const managers = managedUsers.filter((user) => user.role === 'MANAGER').length;
+  const staff = managedUsers.filter((user) => user.role === 'STAFF').length;
+  const hasInvites = managedUsers.some((user) => Boolean(user.inviteExpiresAt));
   const teamFilterOptions: Array<{ value: TeamFilter; label: string }> = [
     { value: 'ALL', label: 'Все' },
     { value: 'ACTIVE', label: 'Активные' },
@@ -2739,7 +2740,7 @@ export function TeamView({
   ];
   const normalizedSearch = teamSearch.trim().toLowerCase();
   const compactTeamSearch = normalizeAuditToken(normalizedSearch);
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = managedUsers.filter((user) => {
     switch (teamFilter) {
       case 'ACTIVE':
         return user.isActive;
@@ -2781,16 +2782,16 @@ export function TeamView({
         </div>
         {isOwner ? (
           <div className="toolbar audit-insights">
-            <div className="badge">Сотрудников: {users.length}</div>
+            <div className="badge">Сотрудников: {managedUsers.length}</div>
             <div className="badge">Активных: {activeUsers}</div>
             <div className="badge">Менеджеров: {managers}</div>
             <div className="badge">Сотрудников склада: {staff}</div>
-            {hasInvites ? <div className="badge">Приглашений: {users.filter((user) => Boolean(user.inviteExpiresAt)).length}</div> : null}
+            {hasInvites ? <div className="badge">Приглашений: {managedUsers.filter((user) => Boolean(user.inviteExpiresAt)).length}</div> : null}
             {inactiveUsers > 0 ? <div className="badge warn">Неактивных: {inactiveUsers}</div> : null}
           </div>
         ) : null}
         {isOwner ? (
-          users.length === 0 ? (
+          managedUsers.length === 0 ? (
             <InlineState
               title="Команда пока не заполнена"
               message="В компании пока нет сотрудников кроме владельца."

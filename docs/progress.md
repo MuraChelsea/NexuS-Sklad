@@ -1311,3 +1311,6 @@
 452. После audit empty-state semantics pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `148 passed`, `npm run build` — ok.
 453. Проведен `inventory stock-summary copy parity` pass: в `InventoryView` badge `Сводка отчета` переведен на `Низкий остаток в отчете`, чтобы summary block не расходился с metric card и не маскировал report-scoped low-stock count под абсолютный показатель каталога.
 454. После inventory stock-summary copy parity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `148 passed`, `npm run build` — ok.
+455. Проведен `team owner-only empty-state integrity` pass: `TeamView` переведен на managed-users semantics без owner, потому что `/v1/users` включает владельца и прежнее условие `users.length === 0` делало empty-state `кроме владельца` недостижимым в реальном потоке.
+456. Добавлен smoke-кейс `TeamView renders owner-only company as empty team state`, фиксирующий сценарий, где в company user list есть только владелец, а экран все равно должен показывать CTA на приглашение сотрудников вместо таблицы с owner row.
+457. После team owner-only empty-state integrity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `149 passed`, `npm run build` — ok.

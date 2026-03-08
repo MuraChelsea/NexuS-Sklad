@@ -1805,6 +1805,24 @@ test('TeamView renders owner empty team state', () => {
   assert.match(html, /Пригласить сотрудника/);
 });
 
+test('TeamView renders owner-only company as empty team state', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TeamView, {
+      company: demoCompany(),
+      users: [{ ...demoCurrentUser(), createdAt: '2026-03-03T00:00:00.000Z', inviteExpiresAt: null }],
+      isOwner: true,
+      onEditCompany: () => undefined,
+      onInvite: () => undefined,
+      onEditUser: () => undefined,
+    }),
+  );
+
+  assert.match(html, /Команда пока не заполнена/);
+  assert.match(html, /В компании пока нет сотрудников кроме владельца\./);
+  assert.match(html, /Сотрудников: 0/);
+  assert.doesNotMatch(html, /owner@nexussklad\.local/);
+});
+
 test('TeamView renders owner team summary badges', () => {
   const html = renderToStaticMarkup(
     React.createElement(TeamView, {
