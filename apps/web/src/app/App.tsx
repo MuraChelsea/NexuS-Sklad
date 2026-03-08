@@ -596,6 +596,88 @@ function formatAuditActionLabel(action: string) {
   }
 }
 
+function normalizeAuditEntityFilter(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return '';
+  }
+
+  switch (normalizeAuditToken(trimmedValue)) {
+    case 'category':
+      return 'category';
+    case 'product':
+      return 'product';
+    case 'company':
+      return 'company';
+    case 'user':
+      return 'user';
+    case 'stockmovement':
+    case 'movement':
+      return 'stock_movement';
+    case 'inventorysession':
+    case 'inventory':
+      return 'inventory_session';
+    case 'inventoryitem':
+    case 'inventoryitemupdated':
+      return 'inventory_item';
+    default:
+      return trimmedValue.toLowerCase().replaceAll(/[\s.-]+/g, '_');
+  }
+}
+
+function normalizeAuditActionFilter(value: string) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return '';
+  }
+
+  if (trimmedValue.includes('.')) {
+    return trimmedValue.toLowerCase();
+  }
+
+  const normalizedToken = normalizeAuditToken(trimmedValue);
+  const explicitActions: Record<string, string> = {
+    movementincomecreated: 'movement.income.created',
+    movementexpensecreated: 'movement.expense.created',
+    movementadjustmentcreated: 'movement.adjustment.created',
+    movementinventorydiffcreated: 'movement.inventory_diff.created',
+    inventorystarted: 'inventory.started',
+    inventoryfinished: 'inventory.finished',
+    inventoryitemupdated: 'inventory.item.updated',
+    userinvited: 'user.invited',
+    authinviteaccepted: 'auth.invite.accepted',
+    authregister: 'auth.register',
+    authlogout: 'auth.logout',
+    authlogin: 'auth.login',
+    authrefresh: 'auth.refresh',
+    authme: 'auth.me',
+  };
+
+  if (explicitActions[normalizedToken]) {
+    return explicitActions[normalizedToken];
+  }
+
+  for (const suffix of ['created', 'updated', 'deleted', 'started', 'finished', 'invited']) {
+    if (normalizedToken.endsWith(suffix)) {
+      const entityToken = normalizedToken.slice(0, -suffix.length);
+      const entityType = normalizeAuditEntityFilter(entityToken);
+      if (entityType) {
+        return `${entityType}.${suffix}`;
+      }
+    }
+  }
+
+  return trimmedValue.toLowerCase().replaceAll(/[\s_]+/g, '.');
+}
+
+function normalizeAuditFilters(next: AuditFiltersState): AuditFiltersState {
+  return {
+    ...next,
+    entityType: normalizeAuditEntityFilter(next.entityType),
+    action: normalizeAuditActionFilter(next.action),
+  };
+}
+
 function formatAuditPayloadKey(key: string) {
   switch (key) {
     case 'name':
@@ -834,6 +916,7 @@ export function App() {
 
   async function loadAdminData(activeSession: SessionState) {
     const movementDayRange = resolveUtcDayRange(reportFilters.date);
+    const normalizedAuditFilters = normalizeAuditFilters(auditFilters);
     const [report, stockReport, company, products, categories, movements, dailyMovements, users, auditLogs] = await Promise.all([
       fetchDailyReport(activeSession.accessToken, {
         date: reportFilters.date,
@@ -851,9 +934,9 @@ export function App() {
       activeSession.user.role === 'OWNER' ? fetchUsers(activeSession.accessToken) : Promise.resolve([]),
       activeSession.user.role === 'OWNER'
         ? fetchAllAuditLogs(activeSession.accessToken, {
-            userId: auditFilters.userId || undefined,
-            entityType: auditFilters.entityType || undefined,
-            action: auditFilters.action || undefined,
+            userId: normalizedAuditFilters.userId || undefined,
+            entityType: normalizedAuditFilters.entityType || undefined,
+            action: normalizedAuditFilters.action || undefined,
           })
         : Promise.resolve([]),
     ]);
@@ -1252,7 +1335,7 @@ export function App() {
                   logs={data.auditLogs}
                   filters={auditFilters}
                   users={data.users}
-                  onChangeFilters={(next) => setAuditFilters((current) => ({ ...current, ...next }))}
+                  onChangeFilters={(next) => setAuditFilters((current) => normalizeAuditFilters({ ...current, ...next }))}
                   onClearFilters={() => setAuditFilters({ userId: '', entityType: '', action: '' })}
                   onExport={(items) => {
                     downloadCsv(
@@ -3996,20 +4079,22 @@ function collectStockReportFilterBadges(filters: ReportFiltersState, categories:
 }
 
 function collectAuditFilterTokens(filters: AuditFiltersState, users: CompanyUserDto[]) {
-  const userName = users.find((item) => item.id === filters.userId)?.name;
+  const normalizedFilters = normalizeAuditFilters(filters);
+  const userName = users.find((item) => item.id === normalizedFilters.userId)?.name;
   return [
-    userName || filters.userId,
-    filters.entityType,
-    filters.action,
+    userName || normalizedFilters.userId,
+    normalizedFilters.entityType,
+    normalizedFilters.action,
   ].filter(Boolean);
 }
 
 function collectAuditFilterBadges(filters: AuditFiltersState, users: CompanyUserDto[] = []) {
-  const userName = users.find((item) => item.id === filters.userId)?.name;
+  const normalizedFilters = normalizeAuditFilters(filters);
+  const userName = users.find((item) => item.id === normalizedFilters.userId)?.name;
   return [
-    userName ? `Пользователь: ${userName}` : filters.userId ? 'Пользователь: выбран вручную' : '',
-    filters.entityType ? `Сущность: ${formatEntityTypeLabel(filters.entityType)}` : '',
-    filters.action ? `Действие: ${formatAuditActionLabel(filters.action)}` : '',
+    userName ? `Пользователь: ${userName}` : normalizedFilters.userId ? 'Пользователь: выбран вручную' : '',
+    normalizedFilters.entityType ? `Сущность: ${formatEntityTypeLabel(normalizedFilters.entityType)}` : '',
+    normalizedFilters.action ? `Действие: ${formatAuditActionLabel(normalizedFilters.action)}` : '',
   ].filter(Boolean);
 }
 
