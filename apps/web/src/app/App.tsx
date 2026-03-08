@@ -336,6 +336,10 @@ function sortCatalogProducts(products: ProductDto[], sortMode: ProductSort) {
   });
 }
 
+function isProductUncategorized(product: ProductDto) {
+  return !product.categoryId || !product.category;
+}
+
 function sortCategories(categories: CategoryDto[], allCategories: CategoryDto[], sortMode: CategorySort) {
   const getParentName = (category: CategoryDto) => allCategories.find((item) => item.id === category.parentId)?.name ?? '';
   if (sortMode === 'NAME_ASC') {
@@ -366,7 +370,7 @@ export function selectVisibleProducts(
       case 'LOW_STOCK':
         return Number(product.currentStock) <= Number(product.minStock);
       case 'UNCATEGORIZED':
-        return !product.categoryId;
+        return isProductUncategorized(product);
       case 'ALL':
       default:
         return true;
@@ -1932,7 +1936,7 @@ export function ProductsView({
   const [productSort, setProductSort] = useState<ProductSort>(defaultSort);
   const [categorySort, setCategorySort] = useState<CategorySort>(defaultCategorySort);
   const lowStockProducts = products.filter((product) => Number(product.currentStock) <= Number(product.minStock)).length;
-  const uncategorizedProducts = products.filter((product) => !product.categoryId).length;
+  const uncategorizedProducts = products.filter(isProductUncategorized).length;
   const rootCategories = categories.filter((category) => !category.parentId).length;
   const normalizedSearch = productSearch.trim().toLowerCase();
   const orderedProducts = selectVisibleProducts(products, productFilter, productSearch, productSort);

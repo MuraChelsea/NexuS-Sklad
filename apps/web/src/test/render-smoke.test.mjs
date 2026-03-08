@@ -229,6 +229,29 @@ test('ProductsView renders filtered empty state when selected filter has no matc
   assert.match(html, /Сбросить фильтр/);
 });
 
+test('ProductsView treats missing category relation as uncategorized', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ProductsView, {
+      isOwner: true,
+      canManage: true,
+      products: [{ ...demoProduct(), categoryId: 'cat-1', category: null }],
+      categories: [demoCategory()],
+      defaultFilter: 'UNCATEGORIZED',
+      onCreate: () => undefined,
+      onEdit: () => undefined,
+      onCreateCategory: () => undefined,
+      onEditCategory: () => undefined,
+      onDeleteProduct: () => undefined,
+      onDeleteCategory: () => undefined,
+      onExportProducts: () => undefined,
+    }),
+  );
+
+  assert.match(html, /Без категории: 1/);
+  assert.match(html, /Demo Product/);
+  assert.doesNotMatch(html, /По выбранному фильтру товаров нет/);
+});
+
 test('ProductsView renders search empty state when query has no matches', () => {
   const html = renderToStaticMarkup(
     React.createElement(ProductsView, {
