@@ -262,8 +262,12 @@ function buildInventorySessionSearchText(session: DailyReportDto['inventory']['s
     .toLowerCase();
 }
 
+function isPendingInvite(user: CompanyUserDto) {
+  return !user.isActive && Boolean(user.inviteExpiresAt);
+}
+
 function buildTeamUserSearchText(user: CompanyUserDto) {
-  const hasInvite = Boolean(user.inviteExpiresAt);
+  const hasInvite = isPendingInvite(user);
   const compactUserId = user.id.replaceAll(/[^a-z0-9а-яё]+/gi, '');
   const compactEmail = (user.email ?? '').replaceAll(/[^a-z0-9а-яё]+/gi, '');
   const phoneDigits = (user.phone ?? '').replaceAll(/\D+/g, '');
@@ -303,7 +307,7 @@ function sortTeamUsers(users: CompanyUserDto[], sortMode: TeamSort) {
   const statusRank = (user: CompanyUserDto) => (
     user.isActive
       ? 0
-      : user.inviteExpiresAt
+      : isPendingInvite(user)
         ? 1
         : 2
   );
@@ -2817,7 +2821,7 @@ export function TeamView({
   const inactiveUsers = managedUsers.length - activeUsers;
   const managers = managedUsers.filter((user) => user.role === 'MANAGER').length;
   const staff = managedUsers.filter((user) => user.role === 'STAFF').length;
-  const hasInvites = managedUsers.some((user) => Boolean(user.inviteExpiresAt));
+  const hasInvites = managedUsers.some((user) => isPendingInvite(user));
   const teamFilterOptions: Array<{ value: TeamFilter; label: string }> = [
     { value: 'ALL', label: 'Все' },
     { value: 'ACTIVE', label: 'Активные' },
@@ -2836,7 +2840,7 @@ export function TeamView({
       case 'STAFF':
         return user.role === 'STAFF';
       case 'INVITED':
-        return Boolean(user.inviteExpiresAt);
+        return isPendingInvite(user);
       case 'ALL':
       default:
         return true;
@@ -2873,7 +2877,7 @@ export function TeamView({
             <div className="badge">Активных: {activeUsers}</div>
             <div className="badge">Менеджеров: {managers}</div>
             <div className="badge">Сотрудников склада: {staff}</div>
-            {hasInvites ? <div className="badge">Приглашений: {managedUsers.filter((user) => Boolean(user.inviteExpiresAt)).length}</div> : null}
+            {hasInvites ? <div className="badge">Приглашений: {managedUsers.filter((user) => isPendingInvite(user)).length}</div> : null}
             {inactiveUsers > 0 ? <div className="badge warn">Неактивных: {inactiveUsers}</div> : null}
           </div>
         ) : null}
@@ -3078,7 +3082,7 @@ export function TeamUserRow({
   user: CompanyUserDto;
   onEdit: () => void;
 }) {
-  const hasInvite = Boolean(user.inviteExpiresAt);
+  const hasInvite = isPendingInvite(user);
   const statusLabel = user.isActive
     ? 'Активен'
     : hasInvite

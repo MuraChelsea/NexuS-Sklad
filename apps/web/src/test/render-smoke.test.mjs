@@ -1877,6 +1877,29 @@ test('TeamView renders owner team summary badges', () => {
   assert.match(html, /Неактивных: 1/);
 });
 
+test('TeamView ignores stale invite metadata for active users', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TeamView, {
+      company: demoCompany(),
+      users: [{
+        ...demoUser(),
+        isActive: true,
+        inviteExpiresAt: '2026-03-09T00:00:00.000Z',
+      }],
+      isOwner: true,
+      defaultFilter: 'INVITED',
+      onEditCompany: () => undefined,
+      onInvite: () => undefined,
+      onEditUser: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(html, /Приглашений:/);
+  assert.match(html, /По выбранному фильтру сотрудников нет/);
+  assert.doesNotMatch(html, /Приглашение до/);
+  assert.match(html, /Активных: 1/);
+});
+
 test('TeamView renders team filters and search controls', () => {
   const html = renderToStaticMarkup(
     React.createElement(TeamView, {
