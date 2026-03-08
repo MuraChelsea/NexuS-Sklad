@@ -629,6 +629,39 @@ button {
   justify-content: flex-end;
 }
 
+.import-upload-button {
+  position: relative;
+}
+
+.import-preview-table {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: auto;
+}
+
+.import-preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.import-preview-table th,
+.import-preview-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.import-preview-table th:last-child,
+.import-preview-table td:last-child {
+  text-align: left;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .user-status-stack {
   display: grid;
   gap: 6px;

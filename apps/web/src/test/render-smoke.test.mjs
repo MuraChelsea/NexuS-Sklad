@@ -9,6 +9,8 @@ import {
   ActiveFilterChips,
   AuditView,
   AuditLogRow,
+  buildProductImportPreview,
+  CatalogImportModal,
   CategoryModal,
   CompanyPanel,
   CompanyModal,
@@ -80,6 +82,47 @@ test('selectVisibleProducts applies current catalog filter, search and sort for 
   assert.equal(items[0].name, 'Банан');
 });
 
+test('buildProductImportPreview plans create, update and skip catalog rows', () => {
+  const preview = buildProductImportPreview(
+    [
+      'name,sku,barcode,category,unit,currentStock,minStock,description',
+      'Кола Zero,SKU-COLA,,Напитки,шт,8,3,Обновленная карточка',
+      'Новый сок,SKU-JUICE,4601111111111,Напитки,шт,12,4,Новый товар',
+      'Cola,SKU-SAME,,Напитки,шт,20,5,',
+    ].join('\n'),
+    [
+      demoProduct(),
+      { ...demoProduct(), id: 'prod-2', name: 'Cola', sku: 'SKU-SAME', currentStock: '20', minStock: '5', categoryId: demoCategory().id, category: demoCategory() },
+      { ...demoProduct(), id: 'prod-3', name: 'Кола', sku: 'SKU-COLA', currentStock: '2', minStock: '1' },
+    ],
+    [demoCategory()],
+  );
+
+  assert.equal(preview.createCount, 1);
+  assert.equal(preview.updateCount, 1);
+  assert.equal(preview.skipCount, 1);
+  assert.equal(preview.errorCount, 0);
+  assert.equal(preview.rows[0].mode, 'update');
+  assert.equal(preview.rows[0].targetQty, 8);
+  assert.equal(preview.rows[1].mode, 'create');
+  assert.equal(preview.rows[2].mode, 'skip');
+});
+
+test('buildProductImportPreview flags unknown categories as errors', () => {
+  const preview = buildProductImportPreview(
+    [
+      'name,category,unit',
+      'Новый сок,Неизвестная категория,шт',
+    ].join('\n'),
+    [demoProduct()],
+    [demoCategory()],
+  );
+
+  assert.equal(preview.errorCount, 1);
+  assert.equal(preview.rows[0].mode, 'error');
+  assert.match(preview.rows[0].message, /не найдена/i);
+});
+
 test('selectVisibleMovements applies current journal search and sort for export parity', () => {
   const items = selectVisibleMovements(
     [
@@ -146,6 +189,7 @@ test('ProductsView renders explicit empty states', () => {
       products: [],
       categories: [],
       onCreate: () => undefined,
+      onImport: () => undefined,
       onEdit: () => undefined,
       onCreateCategory: () => undefined,
       onEditCategory: () => undefined,
@@ -190,6 +234,7 @@ test('ProductsView renders quick filter actions', () => {
       products: [demoProduct()],
       categories: [demoCategory()],
       onCreate: () => undefined,
+      onImport: () => undefined,
       onEdit: () => undefined,
       onCreateCategory: () => undefined,
       onEditCategory: () => undefined,
@@ -202,9 +247,34 @@ test('ProductsView renders quick filter actions', () => {
   assert.match(html, />Все</);
   assert.match(html, />Низкий остаток</);
   assert.match(html, />Без категории</);
+  assert.match(html, /Импорт CSV/);
   assert.match(html, /Поиск по ID, названию, SKU, штрихкоду, категории или единице/);
   assert.match(html, /Риск сначала/);
   assert.match(html, /По названию/);
+});
+
+test('CatalogImportModal renders dry-run summary for actionable csv rows', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(CatalogImportModal, {
+      products: [{ ...demoProduct(), id: 'prod-2', name: 'Кола', sku: 'SKU-COLA', currentStock: '2', minStock: '1' }],
+      categories: [demoCategory()],
+      onClose: () => undefined,
+      onDownloadTemplate: () => undefined,
+      onSubmit: async () => undefined,
+      defaultCsv: [
+        'name,sku,category,unit,currentStock,minStock',
+        'Кола Zero,SKU-COLA,Напитки,шт,8,3',
+        'Новый сок,SKU-JUICE,Напитки,шт,12,4',
+      ].join('\n'),
+    }),
+  );
+
+  assert.match(html, /Импорт каталога из CSV/);
+  assert.match(html, /Создать: 1/);
+  assert.match(html, /Обновить: 1/);
+  assert.match(html, /Ошибки: 0/);
+  assert.match(html, /Обновить карточку и выровнять остаток/);
+  assert.match(html, /Создать товар в категории Напитки/);
 });
 
 test('ProductsView renders filtered empty state when selected filter has no matches', () => {

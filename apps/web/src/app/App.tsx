@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
 import type {
   OpenApiComponents,
 } from '@nexussklad/shared';
@@ -106,6 +106,28 @@ type ProductSort = 'LOW_FIRST' | 'NAME_ASC';
 type CategorySort = 'ROOT_FIRST' | 'NAME_ASC';
 type StockReportSort = 'LOW_FIRST' | 'NAME_ASC';
 type StockStatusFilter = 'ALL' | 'LOW' | 'OK';
+type ProductImportMode = 'create' | 'update' | 'skip' | 'error';
+
+type ProductImportPreviewRow = {
+  line: number;
+  mode: ProductImportMode;
+  name: string;
+  productName: string;
+  message: string;
+  categoryName: string | null;
+  createPayload?: CreateProductRequestDto;
+  updatePayload?: UpdateProductRequestDto;
+  targetQty?: number;
+  productId?: string;
+};
+
+type ProductImportPreview = {
+  rows: ProductImportPreviewRow[];
+  createCount: number;
+  updateCount: number;
+  skipCount: number;
+  errorCount: number;
+};
 
 const DEMO_EMAIL = 'owner@nexussklad.local';
 const DEMO_PASSWORD = 'demo-owner-123';
@@ -342,6 +364,417 @@ function sortCatalogProducts(products: ProductDto[], sortMode: ProductSort) {
 
 function isProductUncategorized(product: ProductDto) {
   return !product.categoryId || !product.category;
+}
+
+function normalizeCatalogImportHeader(header: string) {
+  switch (normalizeAuditToken(header)) {
+    case 'name':
+    case 'название':
+    case 'товар':
+      return 'name';
+    case 'sku':
+    case 'артикул':
+      return 'sku';
+    case 'barcode':
+    case 'штрихкод':
+    case 'bar':
+      return 'barcode';
+    case 'category':
+    case 'categoryname':
+    case 'категория':
+      return 'category';
+    case 'unit':
+    case 'единица':
+    case 'единицаизмерения':
+      return 'unit';
+    case 'currentstock':
+    case 'остаток':
+    case 'текущийостаток':
+    case 'currentqty':
+      return 'currentStock';
+    case 'minstock':
+    case 'миностаток':
+    case 'минимальныйостаток':
+      return 'minStock';
+    case 'description':
+    case 'описание':
+      return 'description';
+    default:
+      return '';
+  }
+}
+
+function parseCsvRows(text: string) {
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return [] as string[][];
+  }
+
+  const firstLine = trimmedText.split(/\r?\n/, 1)[0] ?? '';
+  const delimiter = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0)
+    ? ';'
+    : ',';
+  const rows: string[][] = [];
+  let currentCell = '';
+  let currentRow: string[] = [];
+  let insideQuotes = false;
+
+  for (let index = 0; index < trimmedText.length; index += 1) {
+    const char = trimmedText[index];
+
+    if (char === '"') {
+      if (insideQuotes && trimmedText[index + 1] === '"') {
+        currentCell += '"';
+        index += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (!insideQuotes && char === delimiter) {
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+      continue;
+    }
+
+    if (!insideQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && trimmedText[index + 1] === '\n') {
+        index += 1;
+      }
+      currentRow.push(currentCell.trim());
+      if (currentRow.some((cell) => cell !== '')) {
+        rows.push(currentRow);
+      }
+      currentCell = '';
+      currentRow = [];
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  currentRow.push(currentCell.trim());
+  if (currentRow.some((cell) => cell !== '')) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+}
+
+function parseCatalogImportNumber(value: string, label: string) {
+  const trimmedValue = value.trim().replace(',', '.');
+  if (!trimmedValue) {
+    return { value: undefined as number | undefined };
+  }
+
+  const parsed = Number(trimmedValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return { error: `${label} должен быть числом >= 0` };
+  }
+
+  return { value: parsed };
+}
+
+export function buildProductImportPreview(
+  csvText: string,
+  products: ProductDto[],
+  categories: CategoryDto[],
+): ProductImportPreview {
+  const rows = parseCsvRows(csvText);
+  if (rows.length === 0) {
+    return {
+      rows: [],
+      createCount: 0,
+      updateCount: 0,
+      skipCount: 0,
+      errorCount: 0,
+    };
+  }
+
+  const [headerRow, ...dataRows] = rows;
+  const headerMap = new Map<string, number>();
+  headerRow.forEach((header, index) => {
+    const normalizedHeader = normalizeCatalogImportHeader(header);
+    if (normalizedHeader && !headerMap.has(normalizedHeader)) {
+      headerMap.set(normalizedHeader, index);
+    }
+  });
+
+  if (!headerMap.has('name')) {
+    return {
+      rows: [{
+        line: 1,
+        mode: 'error',
+        name: '',
+        productName: '',
+        message: 'Нужна колонка name или Название',
+        categoryName: null,
+      }],
+      createCount: 0,
+      updateCount: 0,
+      skipCount: 0,
+      errorCount: 1,
+    };
+  }
+
+  const productSkuMap = new Map<string, ProductDto>();
+  const productBarcodeMap = new Map<string, ProductDto>();
+  const productNameUnitMatches = new Map<string, ProductDto[]>();
+  const categoryMatches = new Map<string, CategoryDto[]>();
+  const seenTargets = new Set<string>();
+  const seenCreates = new Set<string>();
+
+  for (const product of products) {
+    if (product.sku) {
+      productSkuMap.set(normalizeAuditToken(product.sku), product);
+    }
+    if (product.barcode) {
+      productBarcodeMap.set(normalizeAuditToken(product.barcode), product);
+    }
+    const fallbackKey = `${normalizeAuditToken(product.name)}::${normalizeAuditToken(product.unit)}`;
+    productNameUnitMatches.set(fallbackKey, [...(productNameUnitMatches.get(fallbackKey) ?? []), product]);
+  }
+
+  for (const category of categories) {
+    const key = normalizeAuditToken(category.name);
+    categoryMatches.set(key, [...(categoryMatches.get(key) ?? []), category]);
+  }
+
+  const previewRows = dataRows.map((row, index) => {
+    const line = index + 2;
+    const readCell = (column: string) => row[headerMap.get(column) ?? -1]?.trim() ?? '';
+    const rawName = readCell('name');
+    const rawSku = readCell('sku');
+    const rawBarcode = readCell('barcode');
+    const rawCategory = readCell('category');
+    const rawUnit = readCell('unit');
+    const rawCurrentStock = readCell('currentStock');
+    const rawMinStock = readCell('minStock');
+    const rawDescription = readCell('description');
+    const normalizedSku = normalizeAuditToken(rawSku);
+    const normalizedBarcode = normalizeAuditToken(rawBarcode);
+    let matchedProduct = normalizedSku
+      ? productSkuMap.get(normalizedSku)
+      : undefined;
+
+    if (!matchedProduct && normalizedBarcode) {
+      matchedProduct = productBarcodeMap.get(normalizedBarcode);
+    }
+
+    if (!matchedProduct && rawName && rawUnit) {
+      const fallbackMatches = productNameUnitMatches.get(`${normalizeAuditToken(rawName)}::${normalizeAuditToken(rawUnit)}`) ?? [];
+      if (fallbackMatches.length === 1) {
+        [matchedProduct] = fallbackMatches;
+      } else if (fallbackMatches.length > 1) {
+        return {
+          line,
+          mode: 'error',
+          name: rawName,
+          productName: rawName,
+          message: 'Найдено несколько товаров с таким названием и единицей. Укажи SKU или штрихкод.',
+          categoryName: rawCategory || null,
+        } satisfies ProductImportPreviewRow;
+      }
+    }
+
+    if (!rawName) {
+      return {
+        line,
+        mode: 'error',
+        name: '',
+        productName: '',
+        message: 'Название товара обязательно',
+        categoryName: rawCategory || null,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    if (!matchedProduct && !rawUnit) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName: rawName,
+        message: 'Для нового товара нужна единица измерения',
+        categoryName: rawCategory || null,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    const parsedCurrentStock = parseCatalogImportNumber(rawCurrentStock, 'Остаток');
+    if (parsedCurrentStock.error) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName: rawName,
+        message: parsedCurrentStock.error,
+        categoryName: rawCategory || null,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    const parsedMinStock = parseCatalogImportNumber(rawMinStock, 'Мин. остаток');
+    if (parsedMinStock.error) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName: rawName,
+        message: parsedMinStock.error,
+        categoryName: rawCategory || null,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    const normalizedCategory = normalizeAuditToken(rawCategory);
+    const categoryCandidates = normalizedCategory ? (categoryMatches.get(normalizedCategory) ?? []) : [];
+    if (normalizedCategory && categoryCandidates.length === 0) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName: rawName,
+        message: `Категория "${rawCategory}" не найдена`,
+        categoryName: rawCategory,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    if (categoryCandidates.length > 1) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName: rawName,
+        message: `Категория "${rawCategory}" найдена неоднозначно`,
+        categoryName: rawCategory,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    const category = categoryCandidates[0] ?? null;
+    const productName = matchedProduct?.name ?? rawName;
+    const importKey = matchedProduct
+      ? `update:${matchedProduct.id}`
+      : `create:${normalizeAuditToken(rawSku) || normalizeAuditToken(rawBarcode) || `${normalizeAuditToken(rawName)}::${normalizeAuditToken(rawUnit)}`}`;
+    if (seenTargets.has(importKey)) {
+      return {
+        line,
+        mode: 'error',
+        name: rawName,
+        productName,
+        message: 'В CSV есть повторная строка для той же позиции',
+        categoryName: category?.name ?? rawCategory ?? null,
+      } satisfies ProductImportPreviewRow;
+    }
+    seenTargets.add(importKey);
+
+    if (!matchedProduct) {
+      const createPayload: CreateProductRequestDto = {
+        categoryId: category?.id ?? null,
+        name: rawName,
+        sku: rawSku || null,
+        barcode: rawBarcode || null,
+        unit: rawUnit,
+        description: rawDescription || null,
+        minStock: parsedMinStock.value ?? 0,
+        currentStock: parsedCurrentStock.value ?? 0,
+      };
+
+      const createIdentity = `${normalizeAuditToken(createPayload.sku ?? '')}:${normalizeAuditToken(createPayload.barcode ?? '')}:${normalizeAuditToken(createPayload.name)}::${normalizeAuditToken(createPayload.unit)}`;
+      if (seenCreates.has(createIdentity)) {
+        return {
+          line,
+          mode: 'error',
+          name: rawName,
+          productName: rawName,
+          message: 'В CSV есть дублирующая строка нового товара',
+          categoryName: category?.name ?? rawCategory ?? null,
+        } satisfies ProductImportPreviewRow;
+      }
+      seenCreates.add(createIdentity);
+
+      return {
+        line,
+        mode: 'create',
+        name: rawName,
+        productName: rawName,
+        message: `Создать товар${category ? ` в категории ${category.name}` : ''}`,
+        categoryName: category?.name ?? null,
+        createPayload,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    const resolvedUnit = rawUnit || matchedProduct.unit;
+    const resolvedMinStock = parsedMinStock.value ?? Number(matchedProduct.minStock);
+    const resolvedDescription = headerMap.has('description')
+      ? (rawDescription || null)
+      : matchedProduct.description ?? null;
+    const resolvedCategoryId = headerMap.has('category')
+      ? (category?.id ?? null)
+      : matchedProduct.categoryId ?? null;
+    const resolvedSku = headerMap.has('sku')
+      ? (rawSku || null)
+      : matchedProduct.sku ?? null;
+    const resolvedBarcode = headerMap.has('barcode')
+      ? (rawBarcode || null)
+      : matchedProduct.barcode ?? null;
+    const updatePayload: UpdateProductRequestDto = {};
+
+    if (rawName !== matchedProduct.name) {
+      updatePayload.name = rawName;
+    }
+    if (resolvedUnit !== matchedProduct.unit) {
+      updatePayload.unit = resolvedUnit;
+    }
+    if (resolvedCategoryId !== (matchedProduct.categoryId ?? null)) {
+      updatePayload.categoryId = resolvedCategoryId;
+    }
+    if (resolvedSku !== (matchedProduct.sku ?? null)) {
+      updatePayload.sku = resolvedSku;
+    }
+    if (resolvedBarcode !== (matchedProduct.barcode ?? null)) {
+      updatePayload.barcode = resolvedBarcode;
+    }
+    if (resolvedDescription !== (matchedProduct.description ?? null)) {
+      updatePayload.description = resolvedDescription;
+    }
+    if (resolvedMinStock !== Number(matchedProduct.minStock)) {
+      updatePayload.minStock = resolvedMinStock;
+    }
+
+    const targetQty = parsedCurrentStock.value;
+    const stockChanged = targetQty !== undefined && targetQty !== Number(matchedProduct.currentStock);
+    if (Object.keys(updatePayload).length === 0 && !stockChanged) {
+      return {
+        line,
+        mode: 'skip',
+        name: rawName,
+        productName: matchedProduct.name,
+        message: 'Без изменений',
+        categoryName: category?.name ?? matchedProduct.category?.name ?? null,
+        productId: matchedProduct.id,
+      } satisfies ProductImportPreviewRow;
+    }
+
+    return {
+      line,
+      mode: 'update',
+      name: rawName,
+      productName: matchedProduct.name,
+      message: stockChanged
+        ? 'Обновить карточку и выровнять остаток'
+        : 'Обновить карточку товара',
+      categoryName: category?.name ?? matchedProduct.category?.name ?? null,
+      updatePayload,
+      targetQty,
+      productId: matchedProduct.id,
+    } satisfies ProductImportPreviewRow;
+  });
+
+  return {
+    rows: previewRows,
+    createCount: previewRows.filter((row) => row.mode === 'create').length,
+    updateCount: previewRows.filter((row) => row.mode === 'update').length,
+    skipCount: previewRows.filter((row) => row.mode === 'skip').length,
+    errorCount: previewRows.filter((row) => row.mode === 'error').length,
+  };
 }
 
 function sortCategories(categories: CategoryDto[], allCategories: CategoryDto[], sortMode: CategorySort) {
@@ -805,6 +1238,7 @@ export function App() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [data, setData] = useState<AdminData | null>(null);
   const [productModal, setProductModal] = useState<ProductDto | null | false>(false);
+  const [productImportOpen, setProductImportOpen] = useState(false);
   const [categoryModal, setCategoryModal] = useState<CategoryDto | null | false>(false);
   const [movementModal, setMovementModal] = useState<'income' | 'expense' | 'adjustment' | null>(null);
   const [companyModalOpen, setCompanyModalOpen] = useState(false);
@@ -851,6 +1285,7 @@ export function App() {
 
   function resetTransientUi() {
     setProductModal(false);
+    setProductImportOpen(false);
     setCategoryModal(false);
     setMovementModal(null);
     setCompanyModalOpen(false);
@@ -1109,6 +1544,7 @@ export function App() {
                   onCreateCategory={() => setCategoryModal(null)}
                   onEditCategory={(category) => setCategoryModal(category)}
                   onCreate={() => setProductModal(null)}
+                  onImport={() => setProductImportOpen(true)}
                   onEdit={(product) => setProductModal(product)}
                   onDeleteProduct={async (product) => {
                     if (!session || !isOwner) return;
@@ -1387,6 +1823,53 @@ export function App() {
             );
             if (!saved) return;
             setProductModal(false);
+          }}
+        />
+      ) : null}
+
+      {data && productImportOpen ? (
+        <CatalogImportModal
+          products={data.products}
+          categories={data.categories}
+          onClose={() => setProductImportOpen(false)}
+          onDownloadTemplate={() => {
+            downloadCsv(
+              'nexussklad-products-import-template.csv',
+              [
+                ['name', 'sku', 'barcode', 'category', 'unit', 'currentStock', 'minStock', 'description'],
+                ['Новый товар', 'SKU-001', '4600000000000', 'Напитки', 'шт', '12', '4', 'Короткое описание'],
+              ],
+            );
+          }}
+          onSubmit={async (rows) => {
+            if (!session) return;
+            const imported = await runSessionAction(
+              async (usableSession) => {
+                for (const row of rows) {
+                  if (row.mode === 'create' && row.createPayload) {
+                    await createProduct(usableSession.accessToken, row.createPayload);
+                  }
+                  if (row.mode === 'update' && row.productId) {
+                    if (row.updatePayload && Object.keys(row.updatePayload).length > 0) {
+                      await updateProduct(usableSession.accessToken, row.productId, row.updatePayload);
+                    }
+                    if (row.targetQty !== undefined) {
+                      await createAdjustment(usableSession.accessToken, {
+                        productId: row.productId,
+                        targetQty: row.targetQty,
+                        comment: `Импорт каталога CSV, строка ${row.line}`,
+                      });
+                    }
+                  }
+                }
+                await refreshAdminData(usableSession);
+                return true;
+              },
+              'Не удалось импортировать каталог',
+              session,
+            );
+            if (!imported) return;
+            setProductImportOpen(false);
           }}
         />
       ) : null}
@@ -1988,6 +2471,7 @@ export function ProductsView({
   categories,
   canManage,
   onCreate,
+  onImport,
   onEdit,
   onCreateCategory,
   onEditCategory,
@@ -2005,6 +2489,7 @@ export function ProductsView({
   categories: CategoryDto[];
   canManage: boolean;
   onCreate: () => void;
+  onImport?: () => void;
   onEdit: (product: ProductDto) => void;
   onCreateCategory: () => void;
   onEditCategory: (category: CategoryDto) => void;
@@ -2074,6 +2559,7 @@ export function ProductsView({
           </div>
           <div className="toolbar-actions">
             <button className="button-ghost" onClick={() => onExportProducts(orderedProducts)}>Экспорт CSV</button>
+            {canManage && onImport ? <button className="button-ghost" onClick={onImport}>Импорт CSV</button> : null}
             {canManage ? <button className="button" onClick={onCreate}>Новый товар</button> : null}
           </div>
         </div>
@@ -3717,6 +4203,139 @@ export function ModalFrame({ title, children, onClose }: { title: string; childr
         <div style={{ marginTop: 18 }}>{children}</div>
       </div>
     </div>
+  );
+}
+
+export function CatalogImportModal({
+  products,
+  categories,
+  onClose,
+  onDownloadTemplate,
+  onSubmit,
+  defaultCsv = '',
+}: {
+  products: ProductDto[];
+  categories: CategoryDto[];
+  onClose: () => void;
+  onDownloadTemplate: () => void;
+  onSubmit: (rows: ProductImportPreviewRow[]) => Promise<void>;
+  defaultCsv?: string;
+}) {
+  const [csvText, setCsvText] = useState(defaultCsv);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const preview = useMemo(
+    () => buildProductImportPreview(csvText, products, categories),
+    [categories, csvText, products],
+  );
+  const actionableRows = preview.rows.filter((row) => row.mode === 'create' || row.mode === 'update');
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setLoadingTemplate(true);
+    try {
+      setCsvText(await file.text());
+    } finally {
+      setLoadingTemplate(false);
+      event.target.value = '';
+    }
+  }
+
+  return (
+    <ModalFrame title="Импорт каталога из CSV" onClose={onClose}>
+      <form className="stack" onSubmit={(event) => {
+        event.preventDefault();
+        void onSubmit(actionableRows).then(onClose);
+      }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Вставь CSV из Excel или загрузи файл. Dry-run заранее покажет, какие строки будут созданы, обновлены или заблокированы ошибками.
+        </p>
+        <div className="actions-row">
+          <button className="button-ghost" type="button" onClick={onDownloadTemplate}>Скачать шаблон</button>
+          <label className="button-ghost import-upload-button">
+            Загрузить CSV
+            <input type="file" accept=".csv,text/csv" onChange={(event) => void handleFileChange(event)} hidden />
+          </label>
+        </div>
+        <label className="field-block">
+          <span className="field-label">CSV содержимое</span>
+          <textarea
+            className="textarea"
+            value={csvText}
+            onChange={(event) => setCsvText(event.target.value)}
+            placeholder="name,sku,barcode,category,unit,currentStock,minStock,description"
+          />
+        </label>
+
+        {loadingTemplate ? <div className="notice">Чтение CSV...</div> : null}
+
+        {csvText.trim() ? (
+          <>
+            <div className="toolbar audit-insights">
+              <div className="badge">Создать: {preview.createCount}</div>
+              <div className="badge">Обновить: {preview.updateCount}</div>
+              <div className="badge">Без изменений: {preview.skipCount}</div>
+              <div className={`badge ${preview.errorCount > 0 ? 'warn' : ''}`}>Ошибки: {preview.errorCount}</div>
+            </div>
+            {preview.rows.length > 0 ? (
+              <div className="import-preview-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Строка</th>
+                      <th>Товар</th>
+                      <th>Режим</th>
+                      <th>Комментарий</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map((row) => (
+                      <tr key={`${row.line}-${row.productName}`}>
+                        <td>{row.line}</td>
+                        <td>
+                          <div>{row.productName || row.name || '—'}</div>
+                          {row.categoryName ? <div className="muted">Категория: {row.categoryName}</div> : null}
+                        </td>
+                        <td>
+                          <span className={`badge${row.mode === 'error' ? ' warn' : ''}`}>
+                            {row.mode === 'create'
+                              ? 'Создать'
+                              : row.mode === 'update'
+                                ? 'Обновить'
+                                : row.mode === 'skip'
+                                  ? 'Пропустить'
+                                  : 'Ошибка'}
+                          </span>
+                        </td>
+                        <td>{row.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <InlineState
+                title="Предпросмотр пока пуст"
+                message="Вставь CSV с заголовками, чтобы увидеть dry-run перед импортом."
+              />
+            )}
+          </>
+        ) : (
+          <InlineState
+            title="CSV ещё не загружен"
+            message="Скачай шаблон или вставь CSV из Excel, чтобы собрать dry-run превью перед импортом."
+          />
+        )}
+
+        <div className="actions-row">
+          <button className="button" type="submit" disabled={actionableRows.length === 0 || preview.errorCount > 0}>
+            Импортировать {actionableRows.length > 0 ? actionableRows.length : ''}
+          </button>
+        </div>
+      </form>
+    </ModalFrame>
   );
 }
 
