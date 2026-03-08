@@ -112,6 +112,28 @@ test('item, list and report envelopes stay consistent across core modules', asyn
     assertItemEnvelope(product, 'products');
     const productId = asJsonObject(product.body.item).id as string;
 
+    const productImport = await requestJson(app, {
+      method: 'POST',
+      url: '/v1/products/import',
+      token: ownerAccessToken,
+      payload: {
+        rows: [
+          {
+            line: 2,
+            mode: 'update',
+            name: `Product ${suffix}`,
+            productId,
+            updatePayload: {
+              minStock: 2,
+            },
+            targetQty: 4,
+          },
+        ],
+      },
+    });
+    assertItemEnvelope(productImport, 'products');
+    assert.equal(asJsonObject(productImport.body).action, 'import');
+
     const movement = await requestJson(app, {
       method: 'POST',
       url: '/v1/movements/income',

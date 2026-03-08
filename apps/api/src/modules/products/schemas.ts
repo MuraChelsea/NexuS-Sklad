@@ -57,3 +57,43 @@ export const updateProductSchema: FastifySchema = {
     },
   },
 };
+
+export const importProductsSchema: FastifySchema = {
+  body: {
+    type: 'object',
+    required: ['rows'],
+    additionalProperties: false,
+    properties: {
+      rows: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          required: ['line', 'mode', 'name'],
+          additionalProperties: false,
+          properties: {
+            line: { type: 'integer', minimum: 1 },
+            mode: { type: 'string', enum: ['create', 'update'] },
+            name: { type: 'string', minLength: 1, maxLength: 160 },
+            productId: { type: 'string', format: 'uuid', nullable: true },
+            createPayload: createProductSchema.body,
+            updatePayload: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                categoryId: { type: 'string', format: 'uuid', nullable: true },
+                name: { type: 'string', minLength: 1, maxLength: 160 },
+                sku: { type: 'string', maxLength: 80, nullable: true },
+                barcode: { type: 'string', maxLength: 80, nullable: true },
+                unit: { type: 'string', minLength: 1, maxLength: 40 },
+                description: { type: 'string', maxLength: 1000, nullable: true },
+                minStock: { type: 'number', minimum: 0, nullable: true },
+              },
+            },
+            targetQty: { type: 'number', minimum: 0, nullable: true },
+          },
+        },
+      },
+    },
+  },
+};

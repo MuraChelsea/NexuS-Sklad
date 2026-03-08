@@ -30,6 +30,7 @@ import {
   deleteProduct,
   fetchCategories,
   fetchProducts,
+  importProducts,
   updateCategory,
   updateProduct,
 } from '../features/products/products';
@@ -1845,23 +1846,17 @@ export function App() {
             if (!session) return;
             const imported = await runSessionAction(
               async (usableSession) => {
-                for (const row of rows) {
-                  if (row.mode === 'create' && row.createPayload) {
-                    await createProduct(usableSession.accessToken, row.createPayload);
-                  }
-                  if (row.mode === 'update' && row.productId) {
-                    if (row.updatePayload && Object.keys(row.updatePayload).length > 0) {
-                      await updateProduct(usableSession.accessToken, row.productId, row.updatePayload);
-                    }
-                    if (row.targetQty !== undefined) {
-                      await createAdjustment(usableSession.accessToken, {
-                        productId: row.productId,
-                        targetQty: row.targetQty,
-                        comment: `Импорт каталога CSV, строка ${row.line}`,
-                      });
-                    }
-                  }
-                }
+                await importProducts(usableSession.accessToken, {
+                  rows: rows.map((row) => ({
+                    line: row.line,
+                    mode: row.mode === 'create' ? 'create' : 'update',
+                    name: row.name,
+                    productId: row.productId ?? null,
+                    createPayload: row.createPayload,
+                    updatePayload: row.updatePayload,
+                    targetQty: row.targetQty ?? null,
+                  })),
+                });
                 await refreshAdminData(usableSession);
                 return true;
               },

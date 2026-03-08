@@ -14,6 +14,7 @@ import {
 import { fetchAllAuditLogs } from '../features/audit/audit.ts';
 import { fetchStockReport } from '../features/dashboard/dashboard.ts';
 import { fetchAllMovements } from '../features/movements/movements.ts';
+import { importProducts } from '../features/products/products.ts';
 
 test('readItemEnvelope returns item for matching module', () => {
   const envelope = readItemEnvelope({ module: 'products', item: { id: 'p1' } }, 'products');
@@ -219,6 +220,54 @@ test('fetchStockReport forwards explicit limit when requested', async () => {
   try {
     await fetchStockReport('access-token', { limit: 25 });
     assert.match(requestUrl, /limit=25/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('importProducts posts atomic catalog import plan and reads products item envelope', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  let requestBody = null;
+  global.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(String(init?.body ?? '{}'));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        module: 'products',
+        action: 'import',
+        item: {
+          applied: true,
+          createdCount: 1,
+          updatedCount: 1,
+          adjustedCount: 1,
+          skippedCount: 0,
+          rows: [],
+        },
+      }),
+    };
+  };
+
+  try {
+    const result = await importProducts('access-token', {
+      rows: [
+        {
+          line: 2,
+          mode: 'update',
+          name: 'Demo Product',
+          productId: '55555555-5555-5555-5555-555555555555',
+          updatePayload: { minStock: 2 },
+          targetQty: 7,
+        },
+      ],
+    });
+    assert.match(requestUrl, /\/v1\/products\/import$/);
+    assert.equal(requestBody.rows[0].mode, 'update');
+    assert.equal(requestBody.rows[0].targetQty, 7);
+    assert.equal(result.updatedCount, 1);
+    assert.equal(result.adjustedCount, 1);
   } finally {
     global.fetch = originalFetch;
   }

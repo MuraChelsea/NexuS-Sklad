@@ -6,6 +6,8 @@ type Product = OpenApiComponents['schemas']['Product'];
 type Category = OpenApiComponents['schemas']['Category'];
 type CreateProductRequest = OpenApiComponents['schemas']['CreateProductRequest'];
 type UpdateProductRequest = OpenApiComponents['schemas']['UpdateProductRequest'];
+type ProductImportApplyRequest = OpenApiComponents['schemas']['ProductImportApplyRequest'];
+type ProductImportResult = OpenApiComponents['schemas']['ProductImportResult'];
 type CreateCategoryRequest = OpenApiComponents['schemas']['CreateCategoryRequest'];
 type UpdateCategoryRequest = OpenApiComponents['schemas']['UpdateCategoryRequest'];
 
@@ -35,6 +37,14 @@ export async function updateProduct(
 ): Promise<Product> {
   const api = new ApiClient(accessToken);
   return api.patchItem<Product>(`/v1/products/${productId}`, 'products', payload);
+}
+
+export async function importProducts(
+  accessToken: string,
+  payload: ProductImportApplyRequest,
+): Promise<ProductImportResult> {
+  const api = new ApiClient(accessToken);
+  return api.postItem<ProductImportResult>('/v1/products/import', 'products', payload);
 }
 
 export async function deleteProduct(accessToken: string, productId: string): Promise<void> {

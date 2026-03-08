@@ -142,6 +142,46 @@ test('inventory, movements, reports and role guards stay consistent', async () =
     const productId = (createProduct.body.item as JsonObject).id as string;
     assert.equal((createProduct.body.item as JsonObject).currentStock, '5');
 
+    const importProducts = await requestJson(app, {
+      method: 'POST',
+      url: '/v1/products/import',
+      token: ownerAccessToken,
+      payload: {
+        rows: [
+          {
+            line: 2,
+            mode: 'update',
+            name: 'Универсальный спрей',
+            productId,
+            updatePayload: {
+              name: 'Универсальный спрей PRO',
+              minStock: 3,
+            },
+            targetQty: 7,
+          },
+          {
+            line: 3,
+            mode: 'create',
+            name: 'Пена для стекол',
+            createPayload: {
+              categoryId,
+              name: 'Пена для стекол',
+              sku: 'FOAM-1',
+              unit: 'шт',
+              minStock: 1,
+              currentStock: 6,
+            },
+          },
+        ],
+      },
+    });
+    assert.equal(importProducts.statusCode, 200);
+    const importItem = importProducts.body.item as JsonObject;
+    assert.equal(importItem.createdCount, 1);
+    assert.equal(importItem.updatedCount, 1);
+    assert.equal(importItem.adjustedCount, 1);
+    assert.equal(importItem.skippedCount, 0);
+
     const inviteStaff = await requestJson(app, {
       method: 'POST',
       url: '/v1/users/invite',
@@ -176,7 +216,7 @@ test('inventory, movements, reports and role guards stay consistent', async () =
       },
     });
     assert.equal(staffIncome.statusCode, 200);
-    assert.equal((staffIncome.body.item as JsonObject).afterQty, '9');
+    assert.equal((staffIncome.body.item as JsonObject).afterQty, '11');
 
     const staffAdjustment = await requestJson(app, {
       method: 'POST',
@@ -227,7 +267,7 @@ test('inventory, movements, reports and role guards stay consistent', async () =
       },
     });
     assert.equal(inventoryUpdate.statusCode, 200);
-    assert.equal((inventoryUpdate.body.item as JsonObject).difference, '-2');
+    assert.equal((inventoryUpdate.body.item as JsonObject).difference, '-4');
 
     const inventoryFinish = await requestJson(app, {
       method: 'POST',
@@ -249,6 +289,7 @@ test('inventory, movements, reports and role guards stay consistent', async () =
     const productItems = asJsonArray(productList.body.items);
     assert.equal(productItems.length, 1);
     assert.equal((productItems[0] as JsonObject).currentStock, '7');
+    assert.equal((productItems[0] as JsonObject).name, 'Универсальный спрей PRO');
 
     const movementList = await requestJson(app, {
       method: 'GET',
@@ -339,9 +380,9 @@ test('inventory, movements, reports and role guards stay consistent', async () =
     const fullStockItem = asJsonObject(fullStockReport.body.item);
     const fullStockSummary = asJsonObject(fullStockItem.summary);
     const fullStockItems = asJsonArray(fullStockItem.items);
-    assert.equal(fullStockSummary.totalItems, 102);
+    assert.equal(fullStockSummary.totalItems, 103);
     assert.equal(fullStockSummary.lowStockItems, 1);
-    assert.equal(fullStockItems.length, 102);
+    assert.equal(fullStockItems.length, 103);
 
     const lowOnlyStockReport = await requestJson(app, {
       method: 'GET',

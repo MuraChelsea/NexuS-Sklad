@@ -114,6 +114,12 @@ function mapApiErrorMessage({
       return 'Неверный email или пароль.';
     case 'INSUFFICIENT_STOCK':
       return 'Недостаточно остатка. Обнови данные и повтори операцию.';
+    case 'PRODUCT_IMPORT_EMPTY':
+      return 'Импорт пустой. Добавь хотя бы одну строку для применения.';
+    case 'PRODUCT_IMPORT_PLAN_INVALID':
+      return 'План импорта устарел или неполон. Пересобери dry-run и повтори.';
+    case 'PRODUCT_IMPORT_DUPLICATE_TARGET':
+      return 'В плане импорта есть дубли по одной и той же позиции. Удали повторяющиеся строки.';
     case 'INVENTORY_STALE_STOCK':
       return 'Остатки изменились после старта инвентаризации. Обнови сессию.';
     case 'INVENTORY_NOT_ACTIVE':

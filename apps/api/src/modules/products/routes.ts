@@ -6,6 +6,7 @@ import type {
 import { requireRoles, resolveActor, resolveCompanyId } from '../../lib/default-company.js';
 import { toProductDto } from '../../lib/dto-mappers.js';
 import {
+  conflictErrorResponses,
   deleteResponseSchemas,
   itemEnvelopeSchema,
   listEnvelopeSchema,
@@ -15,6 +16,7 @@ import {
 } from '../../lib/response-schemas.js';
 import {
   createProductSchema,
+  importProductsSchema,
   listProductsSchema,
   productParamsSchema,
   updateProductSchema,
@@ -106,6 +108,43 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
       item: toProductDto(item),
       module: 'products',
       action: 'create',
+    };
+    return response;
+  });
+
+  app.post('/products/import', {
+    schema: {
+      ...importProductsSchema,
+      response: {
+        200: itemEnvelopeSchema('products', 'import'),
+        ...conflictErrorResponses,
+      },
+    },
+  }, async (request) => {
+    requireRoles(app, request, ['OWNER', 'MANAGER']);
+    const { companyId, userId } = resolveActor(app, request);
+    const body = request.body as {
+      rows: Array<{
+        line: number;
+        mode: 'create' | 'update';
+        name: string;
+        productId?: string | null;
+        createPayload?: OpenApiSchemas['CreateProductRequest'];
+        updatePayload?: OpenApiSchemas['UpdateProductRequest'];
+        targetQty?: number | null;
+      }>;
+    };
+
+    const item = await productService.importApply({
+      companyId,
+      userId,
+      rows: body.rows,
+    });
+
+    const response = {
+      item,
+      module: 'products',
+      action: 'import',
     };
     return response;
   });

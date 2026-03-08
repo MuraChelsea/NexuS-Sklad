@@ -489,6 +489,35 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /v1/products/import:
+    post:
+      tags: [products]
+      summary: Apply atomic product import plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductImportApplyRequest'
+      responses:
+        '200':
+          description: Product import applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductImportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /v1/products/{productId}:
     get:
       tags: [products]
@@ -1458,6 +1487,69 @@ components:
           type: [string, 'null']
         minStock:
           type: number
+    ProductImportApplyRow:
+      type: object
+      required: [line, mode, name]
+      properties:
+        line:
+          type: integer
+        mode:
+          type: string
+          enum: [create, update]
+        name:
+          type: string
+        productId:
+          type: [string, 'null']
+          format: uuid
+        createPayload:
+          $ref: '#/components/schemas/CreateProductRequest'
+        updatePayload:
+          allOf:
+            - $ref: '#/components/schemas/UpdateProductRequest'
+        targetQty:
+          type: [number, 'null']
+    ProductImportApplyRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImportApplyRow'
+    ProductImportResultRow:
+      type: object
+      required: [line, mode, productId, name, message]
+      properties:
+        line:
+          type: integer
+        mode:
+          type: string
+          enum: [create, update, skip]
+        productId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        message:
+          type: string
+    ProductImportResult:
+      type: object
+      required: [applied, createdCount, updatedCount, adjustedCount, skippedCount, rows]
+      properties:
+        applied:
+          type: boolean
+        createdCount:
+          type: integer
+        updatedCount:
+          type: integer
+        adjustedCount:
+          type: integer
+        skippedCount:
+          type: integer
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImportResultRow'
     ProductListResponse:
       type: object
       required: [items, module]
@@ -1485,6 +1577,16 @@ components:
           properties:
             action:
               const: update
+    ProductImportResponse:
+      type: object
+      required: [item, module, action]
+      properties:
+        item:
+          $ref: '#/components/schemas/ProductImportResult'
+        module:
+          const: products
+        action:
+          const: import
     MovementActor:
       type: object
       required: [id, name, role]

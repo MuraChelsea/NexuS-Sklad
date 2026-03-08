@@ -799,6 +799,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply atomic product import plan */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProductImportApplyRequest"];
+                };
+            };
+            responses: {
+                /** @description Product import applied */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProductImportResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequestError"];
+                401: components["responses"]["UnauthorizedError"];
+                403: components["responses"]["ForbiddenError"];
+                409: components["responses"]["ConflictError"];
+                500: components["responses"]["InternalServerError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/products/{productId}": {
         parameters: {
             query?: never;
@@ -1616,6 +1661,37 @@ export interface components {
             description?: string | null;
             minStock?: number;
         };
+        ProductImportApplyRow: {
+            line: number;
+            /** @enum {string} */
+            mode: "create" | "update";
+            name: string;
+            /** Format: uuid */
+            productId?: string | null;
+            createPayload?: components["schemas"]["CreateProductRequest"];
+            updatePayload?: components["schemas"]["UpdateProductRequest"];
+            targetQty?: number | null;
+        };
+        ProductImportApplyRequest: {
+            rows: components["schemas"]["ProductImportApplyRow"][];
+        };
+        ProductImportResultRow: {
+            line: number;
+            /** @enum {string} */
+            mode: "create" | "update" | "skip";
+            /** Format: uuid */
+            productId: string | null;
+            name: string;
+            message: string;
+        };
+        ProductImportResult: {
+            applied: boolean;
+            createdCount: number;
+            updatedCount: number;
+            adjustedCount: number;
+            skippedCount: number;
+            rows: components["schemas"]["ProductImportResultRow"][];
+        };
         ProductListResponse: {
             items: components["schemas"]["Product"][];
             /** @constant */
@@ -1630,6 +1706,13 @@ export interface components {
         ProductUpdateResponse: components["schemas"]["ProductResponse"] & {
             /** @constant */
             action?: "update";
+        };
+        ProductImportResponse: {
+            item: components["schemas"]["ProductImportResult"];
+            /** @constant */
+            module: "products";
+            /** @constant */
+            action: "import";
         };
         MovementActor: {
             /** Format: uuid */
