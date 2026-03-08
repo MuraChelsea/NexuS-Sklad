@@ -2449,6 +2449,7 @@ test('ReportingView renders active export context', () => {
 
   assert.match(html, /Контекст отчета/);
   assert.match(html, /Дата сводки: 2026-03-03/);
+  assert.match(html, /Низкий остаток в отчете/);
   assert.match(html, /Поиск: cola/);
   assert.match(html, /Категория: Напитки/);
   assert.match(html, /Только низкий остаток/);
@@ -2479,6 +2480,7 @@ test('InventoryView renders empty session CTA and stock filters context', () => 
 
   assert.match(html, /Сессии за день/);
   assert.match(html, /Дата: 2026-03-03/);
+  assert.match(html, /Низкий остаток в отчете/);
   assert.match(html, /За выбранный день сессий инвентаризации нет/);
   assert.match(html, /Запустить сессию/);
   assert.match(html, /Контекст отчета/);

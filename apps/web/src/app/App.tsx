@@ -2420,7 +2420,7 @@ export function InventoryView({
     <>
       <section className="metrics-grid">
         <MetricCard title="Сессии за день" value={String(report.inventory.sessionsCount)} tone="var(--accent)" />
-        <MetricCard title="Низкий остаток" value={String(stockReport.summary.lowStockItems)} tone="var(--accent-2)" />
+        <MetricCard title="Низкий остаток в отчете" value={String(stockReport.summary.lowStockItems)} tone="var(--accent-2)" />
         <MetricCard title="Позиции в отчете" value={String(stockReport.summary.totalItems)} tone="var(--sky)" />
       </section>
 
@@ -3068,7 +3068,7 @@ export function ReportingView({
       <section className="metrics-grid">
         <MetricCard title="Экспорт товаров" value={String(products.length)} tone="var(--sky)" />
         <MetricCard title="Экспорт движений" value={String(movements.length)} tone="var(--success)" />
-        <MetricCard title="Низкий остаток" value={String(stockReport.summary.lowStockItems)} tone="var(--accent-2)" />
+        <MetricCard title="Низкий остаток в отчете" value={String(stockReport.summary.lowStockItems)} tone="var(--accent-2)" />
       </section>
 
       <section className="table-card">
