@@ -1306,3 +1306,6 @@
 447. Проведен `reporting audit-only empty-state integrity` pass: `ReportingView` больше не показывает `Экспортировать пока нечего`, если у owner есть доступный `auditLogs` export при пустых товарах, движениях и stock report.
 448. Добавлен smoke-кейс `ReportingView does not show empty state when only audit export has data`, фиксирующий owner-only сценарий с единственным доступным export source из журнала изменений.
 449. После reporting audit-only empty-state integrity pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `147 passed`, `npm run build` — ok.
+450. Проведен `audit empty-state semantics` pass: `AuditView` теперь различает полностью пустой журнал и пустой результат из-за active server-side filters, чтобы экран без фильтров не маркировался как filtered state.
+451. Добавлены smoke-кейсы `AuditView renders empty filtered state` и `AuditView renders filtered empty state when server-side filters remove all logs`, фиксирующие обе ветки no-data semantics вместе с badge-контекстом активных фильтров.
+452. После audit empty-state semantics pass локально подтверждены: `apps/web npm run check` — ok, `npm run test:render` — `148 passed`, `npm run build` — ok.

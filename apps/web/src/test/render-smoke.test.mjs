@@ -2109,8 +2109,25 @@ test('AuditView renders empty filtered state', () => {
     }),
   );
 
-  assert.match(html, /журнал пуст/);
+  assert.match(html, /Журнал пока пуст/);
   assert.match(html, /Фильтры не заданы/);
+});
+
+test('AuditView renders filtered empty state when server-side filters remove all logs', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(AuditView, {
+      logs: [],
+      users: [demoUser()],
+      filters: { userId: demoUser().id, entityType: 'product', action: '' },
+      onChangeFilters: () => undefined,
+      onClearFilters: () => undefined,
+      onExport: () => undefined,
+    }),
+  );
+
+  assert.match(html, /По текущим фильтрам журнал пуст/);
+  assert.match(html, /Пользователь: Мурад И\./);
+  assert.match(html, /Сущность: товар/);
 });
 
 test('AuditView renders insight badges and clear-filters action', () => {
